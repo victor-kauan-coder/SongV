@@ -21,3 +21,6 @@ keystore.properties
 # Logs / temp
 *.log
 .impeccable/
+
+# Saídas locais de ferramentas
+biblioteca_demo/

@@ -1,6 +1,15 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+}
+
+// Assinatura de release: lida de keystore.properties (fora do git). Sem o arquivo, o
+// build de release sai sem assinatura e o de debug continua funcionando normalmente.
+val propriedadesAssinatura = Properties().apply {
+    val arquivo = rootProject.file("keystore.properties")
+    if (arquivo.exists()) arquivo.inputStream().use { load(it) }
 }
 
 android {
@@ -11,18 +20,31 @@ android {
         applicationId = "com.songv.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "2.0.0"
 
         vectorDrawables {
             useSupportLibrary = true
         }
     }
 
+    signingConfigs {
+        if (propriedadesAssinatura.isNotEmpty()) {
+            create("release") {
+                storeFile = rootProject.file(propriedadesAssinatura.getProperty("storeFile"))
+                storePassword = propriedadesAssinatura.getProperty("storePassword")
+                keyAlias = propriedadesAssinatura.getProperty("keyAlias")
+                keyPassword = propriedadesAssinatura.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfigs.findByName("release")?.let { signingConfig = it }
         }
     }
 
@@ -37,6 +59,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     composeOptions {
@@ -51,34 +74,30 @@ android {
 }
 
 dependencies {
-    implementation("androidx.activity:activity-ktx:1.9.1")
-    implementation("androidx.core:core-splashscreen:1.0.1")
-    // Core / Compose
     implementation("androidx.core:core-ktx:1.13.1")
+    implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("androidx.activity:activity-compose:1.9.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
-    implementation("androidx.activity:activity-compose:1.9.1")
     implementation("androidx.palette:palette-ktx:1.0.0")
+
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
-    implementation("androidx.navigation:navigation-compose:2.7.7")
 
-    // Media3 / ExoPlayer
+    // Reprodução: ExoPlayer + MediaSession (notificação, tela de bloqueio, fones Bluetooth)
     implementation("androidx.media3:media3-exoplayer:1.4.0")
     implementation("androidx.media3:media3-common:1.4.0")
     implementation("androidx.media3:media3-session:1.4.0")
-    // Fornece androidx.media.app.NotificationCompat.MediaStyle, usado na notificação de mídia
-    implementation("androidx.media:media:1.7.0")
 
-    // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-
-    // Persistência de preferências (tema, favoritos)
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20231013")
 }
