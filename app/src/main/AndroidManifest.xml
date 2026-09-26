@@ -2,27 +2,36 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- Android 13+ -->
+    <!-- Ler a biblioteca: Android 13+ usa READ_MEDIA_AUDIO; até o 12, READ_EXTERNAL_STORAGE. -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
-    <!-- Android 12 e abaixo -->
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
 
+    <!-- Tocar em segundo plano com a tela apagada e mostrar os controles de mídia. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
-    <!-- Usadas apenas pela tradução de letra (recurso opcional, sob demanda do usuário) -->
+    <!-- Só para recursos pedidos pelo usuário: buscar letra (LRCLIB) e traduzir. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Para abrir o equalizador do sistema (Android 11+ exige declarar a consulta). -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.DISPLAY_AUDIO_EFFECT_CONTROL_PANEL" />
+        </intent>
+    </queries>
 
     <application
         android:name=".SongVApp"
         android:allowBackup="true"
+        android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.SongV"
         tools:targetApi="34">
@@ -38,9 +47,16 @@
             </intent-filter>
         </activity>
 
+        <!-- Capas para a notificação, tela de bloqueio e Bluetooth (somente leitura, só imagens). -->
+        <provider
+            android:name=".data.CapaProvider"
+            android:authorities="com.songv.app.capas"
+            android:exported="true"
+            tools:ignore="ExportedContentProvider" />
+
         <service
             android:name=".player.MusicPlaybackService"
-            android:exported="false"
+            android:exported="true"
             android:foregroundServiceType="mediaPlayback">
             <intent-filter>
                 <action android:name="androidx.media3.session.MediaSessionService" />

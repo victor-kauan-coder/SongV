@@ -1,514 +1,777 @@
 package com.songv.app.player
 
 import android.app.Application
-import android.graphics.Bitmap
+import android.net.Uri
+import androidx.annotation.OptIn
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import com.songv.app.data.MusicaRepository
-import com.songv.app.data.PreferenciasRepository
-import com.songv.app.data.ResultadoTraducao
-import com.songv.app.data.TradutorLetraService
+import androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder
+import com.songv.app.SongVApp
+import com.songv.app.data.Destaque
+import com.songv.app.data.ExibicaoTraducao
+import com.songv.app.data.ModoTema
+import com.songv.app.data.Ordenacao
+import com.songv.app.data.Preferencias
+import com.songv.app.data.Sessao
+import com.songv.app.data.comparadorAlfabetico
+import com.songv.app.data.normalizarBusca
+import com.songv.app.letra.LetraRepository
+import com.songv.app.letra.TradutorLetra
+import com.songv.app.letra.nomeIdioma
+import com.songv.app.model.Album
+import com.songv.app.model.Artista
+import com.songv.app.model.Letra
 import com.songv.app.model.Musica
 import com.songv.app.model.Playlist
-import com.songv.app.ui.theme.ModoLuminosidade
-import com.songv.app.ui.theme.TemaApp
+import com.songv.app.model.TipoLetra
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.ByteArrayOutputStream
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.random.Random
 
-/**
- * Constrói o [MediaItem] completo desta música: URI de reprodução + metadata (título, artista,
- * capa). É a metadata que faz a notificação de mídia do sistema (estilo Spotify) mostrar a capa,
- * o título e o artista da faixa, além de habilitar os botões de play/pause/próxima na notificação
- * — sem isso, o MediaSession não tem o que exibir e a notificação fica genérica ou nem aparece.
- *
- * A conversão da capa em JPEG é um trabalho de CPU relativamente caro quando repetido para uma
- * biblioteca inteira; [CacheMediaItem] garante que cada música só passa por isso uma vez, mesmo
- * que apareça em várias listas (biblioteca, uma playlist, os resultados de busca, etc).
- */
-private object CacheMediaItem {
-    private val cache = java.util.concurrent.ConcurrentHashMap<String, MediaItem>()
+// ---- Estados expostos para a UI ----
 
-    fun obterOuCriar(musica: Musica): MediaItem {
-        return cache.getOrPut(musica.id) { musica.construirMediaItem() }
-    }
-}
-
-private fun Musica.construirMediaItem(): MediaItem {
-    val metadataBuilder = MediaMetadata.Builder()
-        .setTitle(titulo)
-        .setArtist(artista)
-
-    capa?.let { bitmap ->
-        try {
-            val bytes = ByteArrayOutputStream().use { stream ->
-                bitmap.compress(Bitmap.CompressFormat.JPEG, 90, stream)
-                stream.toByteArray()
-            }
-            metadataBuilder.setArtworkData(bytes, MediaMetadata.PICTURE_TYPE_FRONT_COVER)
-        } catch (e: Exception) {
-            // Sem capa na notificação não é um erro que deva interromper a reprodução.
-        }
-    }
-
-    return MediaItem.Builder()
-        .setUri(uri)
-        .setMediaMetadata(metadataBuilder.build())
-        .build()
-}
-
-private fun Musica.paraMediaItem(): MediaItem = CacheMediaItem.obterOuCriar(this)
-
-/** Modo de repetição da fila, espelhando os modos do ExoPlayer de forma legível na UI. */
-enum class ModoRepeticao { DESLIGADO, REPETIR_TUDO, REPETIR_UMA }
-
-/**
- * Estado observável da tela: biblioteca carregada + faixa/estado de reprodução atuais.
- *
- * [biblioteca] é sempre o acervo completo de músicas do dispositivo (não muda ao tocar uma
- * playlist ou artista específico). [filaReproducao] é a lista efetivamente carregada no
- * ExoPlayer no momento — pode ser a biblioteca inteira, uma playlist, ou as faixas de um artista.
- * [indiceFilaAtual] é sempre relativo a [filaReproducao].
- */
-data class EstadoPlayer(
-    val carregandoBiblioteca: Boolean = true,
-    val preferenciasCarregadas: Boolean = false,
-    val biblioteca: List<Musica> = emptyList(),
-    val filaReproducao: List<Musica> = emptyList(),
-    val faixaAtual: Musica? = null,
-    val indiceFilaAtual: Int = -1,
-    val tocando: Boolean = false,
-    val posicaoMs: Long = 0L,
-    val tema: TemaApp = TemaApp.ROXO_DARK,
-    val corPersonalizadaArgb: Int? = null,
-    val modoLuminosidade: ModoLuminosidade = ModoLuminosidade.ESCURO,
-    val favoritos: Set<String> = emptySet(),
-    val playlists: List<Playlist> = emptyList(),
-    val termoBusca: String = "",
-    val embaralhado: Boolean = false,
-    val modoRepeticao: ModoRepeticao = ModoRepeticao.DESLIGADO,
+data class EstadoBiblioteca(
+    val carregando: Boolean = true,
+    val pronta: Boolean = false,
+    val lidas: Int = 0,
+    val total: Int = 0,
+    val musicas: List<Musica> = emptyList(),
+    val albuns: List<Album> = emptyList(),
+    val artistas: List<Artista> = emptyList(),
+    val porId: Map<String, Musica> = emptyMap(),
     val erro: String? = null,
-    /**
-     * Biblioteca agrupada por artista, já calculada e armazenada (não é um `get()` computado).
-     * É recalculada só quando [biblioteca] muda de fato — ver [PlayerViewModel.carregarBiblioteca]
-     * — e não a cada atualização de [posicaoMs] (5x por segundo durante a reprodução), que era o
-     * que causava recalcular esse agrupamento sem necessidade e travar a tela inicial.
-     */
-    val musicasPorArtista: List<Pair<String, List<Musica>>> = emptyList(),
-    // ---- Tradução de letra (recurso opcional, sob demanda) ----
-    /** Idioma de destino escolhido pelo usuário pra tradução (código ISO 639-1), padrão português. */
-    val idiomaTraducao: String = "pt",
-    /** true enquanto uma tradução está sendo buscada, pra mostrar um indicador de carregamento. */
-    val traduzindo: Boolean = false,
-    /** Mensagem de erro da última tentativa de tradução (sem internet, falha de rede, etc). */
-    val erroTraducao: String? = null,
-    /**
-     * Cache simples: id da música + idioma -> linhas traduzidas, na mesma ordem/tamanho de
-     * [Musica.letra]. Evita rechamar a API toda vez que o usuário reabre o painel de letra.
-     */
-    val letrasTraduzidas: Map<String, List<String>> = emptyMap(),
-    /** true quando o usuário pediu pra ver a tradução (alterna com o texto original). */
-    val mostrandoTraducao: Boolean = false
+)
+
+/** Uma entrada da fila. [chave] é única mesmo se a mesma música estiver duas vezes na fila. */
+data class ItemFila(val chave: String, val musica: Musica, val janela: Int)
+
+enum class ModoRepeticao { DESLIGADO, TUDO, UMA }
+
+data class EstadoReproducao(
+    /** Na ordem em que vai tocar — já considerando o modo aleatório. */
+    val fila: List<ItemFila> = emptyList(),
+    val posicao: Int = -1,
+    val tocando: Boolean = false,
+    val carregando: Boolean = false,
+    val aleatorio: Boolean = false,
+    val repeticao: ModoRepeticao = ModoRepeticao.DESLIGADO,
+    /** De onde a fila veio ("Álbum · Nome", "Favoritas"…), mostrado no topo do player. */
+    val origem: String? = null,
 ) {
-    /** Chave de cache para a música+idioma atualmente selecionados. */
-    fun chaveTraducao(idMusica: String): String = "$idMusica|$idiomaTraducao"
-    /** Biblioteca filtrada pelo termo de busca (por título ou artista, sem diferenciar maiúsculas/acentos simples). */
-    val bibliotecaFiltrada: List<Musica>
-        get() = if (termoBusca.isBlank()) {
-            biblioteca
-        } else {
-            val termo = termoBusca.trim().lowercase()
-            biblioteca.filter {
-                it.titulo.lowercase().contains(termo) || it.artista.lowercase().contains(termo)
-            }
-        }
-
-    /** Fila de reprodução na ordem real do player: a faixa atual e tudo que vem depois dela. */
-    val proximasNaFila: List<Musica>
-        get() = if (indiceFilaAtual in filaReproducao.indices) filaReproducao.drop(indiceFilaAtual + 1) else emptyList()
-
-    /** Lista de nomes de artistas distintos, na mesma ordem de [musicasPorArtista]. */
-    val artistas: List<String>
-        get() = musicasPorArtista.map { it.first }
-
-    /** Resolve os objetos [Musica] de uma [Playlist] a partir dos ids salvos, preservando a ordem. */
-    fun musicasDaPlaylist(playlist: Playlist): List<Musica> {
-        val porId = biblioteca.associateBy { it.id }
-        return playlist.musicasIds.mapNotNull { porId[it] }
-    }
+    val atual: Musica? get() = fila.getOrNull(posicao)?.musica
+    val aSeguir: List<ItemFila> get() = if (posicao >= 0) fila.subList(posicao + 1, fila.size) else emptyList()
 }
 
+data class Progresso(val posicaoMs: Long = 0, val duracaoMs: Long = 0)
+
+data class EstadoLetra(
+    val musicaId: String? = null,
+    /** null enquanto carrega. */
+    val letra: Letra? = null,
+    val buscando: Boolean = false,
+    val traducao: TradutorLetra.Traducao? = null,
+    val traduzindo: Boolean = false,
+    val avisoTraducao: String? = null,
+)
+
+data class Mensagem(val texto: String, val acao: String? = null, val aoAgir: (() -> Unit)? = null)
+
+@OptIn(UnstableApi::class)
 class PlayerViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val repositorio = MusicaRepository(application)
-    private val preferencias = PreferenciasRepository(application)
-    private val tradutor = TradutorLetraService(application)
+    private val app = application as SongVApp
+    private val prefs = app.preferencias
+    private val capas = app.capas
 
-    val exoPlayer: ExoPlayer = PlayerHolder.obterExoPlayer(application)
+    val player: ExoPlayer = PlayerHolder.player(application)
 
-    private val _estado = MutableStateFlow(EstadoPlayer())
-    val estado: StateFlow<EstadoPlayer> = _estado.asStateFlow()
+    val preferencias: StateFlow<Preferencias> =
+        prefs.preferencias.stateIn(viewModelScope, SharingStarted.Eagerly, Preferencias())
 
-    private var jobProgresso: Job? = null
+    private val _biblioteca = MutableStateFlow(EstadoBiblioteca())
+    val biblioteca: StateFlow<EstadoBiblioteca> = _biblioteca.asStateFlow()
+
+    private val _reproducao = MutableStateFlow(EstadoReproducao())
+    val reproducao: StateFlow<EstadoReproducao> = _reproducao.asStateFlow()
+
+    private val _letra = MutableStateFlow(EstadoLetra())
+    val letra: StateFlow<EstadoLetra> = _letra.asStateFlow()
+
+    val timer: StateFlow<TimerSono.Estado> = TimerSono.estado
+
+    private val _mensagens = MutableSharedFlow<Mensagem>(extraBufferCapacity = 8)
+    val mensagens: SharedFlow<Mensagem> = _mensagens.asSharedFlow()
+
+    /**
+     * Posição da faixa, num fluxo separado do resto do estado: só as telas que mostram progresso
+     * o observam, e ele só roda enquanto alguém observa. Antes a posição morava no estado geral
+     * e o app inteiro recompunha 5 vezes por segundo.
+     */
+    val progresso: StateFlow<Progresso> = flow {
+        while (true) {
+            emit(Progresso(player.currentPosition.coerceAtLeast(0), duracaoAtual()))
+            delay(if (player.isPlaying) 80 else 400)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(1_000), Progresso())
+
+    // mediaId → música, para as faixas que este ViewModel colocou no player.
+    private val registro = HashMap<String, Musica>()
+    private val contador = AtomicLong(System.currentTimeMillis())
+    private var jobBiblioteca: Job? = null
+    private var jobLetra: Job? = null
+    private var jobTraducao: Job? = null
+    private var sessaoVerificada = false
+    private var ultimoRegistrado: String? = null
+    private var chaveEmContagem: String? = null
+    private var jobRegistro: Job? = null
+
+    private val ouvinte = object : Player.Listener {
+        override fun onEvents(player: Player, events: Player.Events) {
+            if (events.containsAny(
+                    Player.EVENT_TIMELINE_CHANGED,
+                    Player.EVENT_MEDIA_ITEM_TRANSITION,
+                    Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED,
+                )
+            ) {
+                sincronizarFila()
+            } else {
+                sincronizarEstado()
+            }
+            if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION) || events.contains(Player.EVENT_TIMELINE_CHANGED)) {
+                aoTrocarFaixa()
+                salvarSessao()
+            }
+            if (events.contains(Player.EVENT_IS_PLAYING_CHANGED) || events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)) {
+                if (player.isPlaying) registrarReproducao() else salvarSessao()
+            }
+        }
+    }
 
     init {
-        exoPlayer.addListener(object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                _estado.value = _estado.value.copy(tocando = isPlaying)
-            }
-
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                val novoIndice = exoPlayer.currentMediaItemIndex
-                val musica = _estado.value.filaReproducao.getOrNull(novoIndice)
-                _estado.value = _estado.value.copy(faixaAtual = musica, indiceFilaAtual = novoIndice)
-            }
-        })
-        iniciarLoopProgresso()
-        observarPreferencias()
-    }
-
-    private fun observarPreferencias() {
+        player.addListener(ouvinte)
+        sincronizarFila()
         viewModelScope.launch {
-            preferencias.temaFlow.collect { tema ->
-                _estado.value = _estado.value.copy(tema = tema)
-                marcarPreferenciasCarregadasSeProntas()
-            }
-        }
-        viewModelScope.launch {
-            preferencias.corCustomFlow.collect { argb ->
-                _estado.value = _estado.value.copy(corPersonalizadaArgb = argb)
-            }
-        }
-        viewModelScope.launch {
-            preferencias.favoritosFlow.collect { favoritos ->
-                _estado.value = _estado.value.copy(favoritos = favoritos)
-            }
-        }
-        viewModelScope.launch {
-            preferencias.luminosidadeFlow.collect { modo ->
-                _estado.value = _estado.value.copy(modoLuminosidade = modo)
-                marcarPreferenciasCarregadasSeProntas()
-            }
-        }
-        viewModelScope.launch {
-            preferencias.playlistsFlow.collect { playlists ->
-                _estado.value = _estado.value.copy(playlists = playlists)
+            // Enquanto toca, salva a sessão de tempos em tempos (queda de bateria, app morto pelo sistema…).
+            while (isActive) {
+                delay(20_000)
+                if (player.isPlaying) salvarSessao()
             }
         }
     }
 
-    /**
-     * Sinaliza [EstadoPlayer.preferenciasCarregadas] assim que o tema real (persistido) chegou —
-     * usado pela splash screen do sistema para não liberar a UI antes da cor correta estar
-     * disponível, evitando o "flash" do tema padrão antes de trocar para o tema salvo.
-     */
-    private fun marcarPreferenciasCarregadasSeProntas() {
-        // A primeira emissão de cada flow já reflete o valor persistido (DataStore emite o valor
-        // salvo na primeira coleta, não um default seguido de atualização), então basta saber que
-        // já tivemos pelo menos uma emissão.
-        if (!_estado.value.preferenciasCarregadas) {
-            _estado.value = _estado.value.copy(preferenciasCarregadas = true)
-        }
-    }
+    // =========================================================================
+    // Biblioteca
+    // =========================================================================
 
-    /** Varre a biblioteca local (pasta "Music" por padrão) e popula a fila do ExoPlayer. */
-    fun carregarBiblioteca(pastaFiltro: String? = MusicaRepository.PASTA_PADRAO) {
-        viewModelScope.launch {
-            _estado.value = _estado.value.copy(carregandoBiblioteca = true, erro = null)
+    /** Lê a biblioteca. Sem [forcar], não faz nada se já carregou — girar a tela não reinicia nada. */
+    fun carregarBiblioteca(forcar: Boolean = false) {
+        if (jobBiblioteca?.isActive == true) return
+        if (!forcar && _biblioteca.value.pronta) return
+        jobBiblioteca = viewModelScope.launch {
+            val p = preferencias.first { it.carregadas }
+            _biblioteca.update { it.copy(carregando = true, erro = null, lidas = 0, total = 0) }
             try {
-                val musicas = repositorio.varrer(pastaFiltro)
-                // Construir os MediaItems comprime a capa de cada música em JPEG — trabalho de
-                // CPU que, feito na main thread pra uma biblioteca inteira de uma vez, travaria a
-                // tela; withContext tira isso do caminho da UI.
-                val mediaItems = withContext(Dispatchers.Default) { musicas.map { it.paraMediaItem() } }
-                exoPlayer.setMediaItems(mediaItems)
-                exoPlayer.prepare()
-                val agrupadoPorArtista = musicas.groupBy { it.artista }
-                    .toSortedMap(compareBy { it.lowercase() })
-                    .map { (artista, musicasDoArtista) -> artista to musicasDoArtista }
-                _estado.value = _estado.value.copy(
-                    carregandoBiblioteca = false,
-                    biblioteca = musicas,
-                    filaReproducao = musicas,
-                    musicasPorArtista = agrupadoPorArtista,
-                    erro = if (musicas.isEmpty()) "Nenhum MP3 encontrado na pasta configurada." else null
-                )
+                val inicio = System.currentTimeMillis()
+                val musicas = app.musicas.varrer(p.pastaBiblioteca, p.ignorarCurtas) { lidas, total ->
+                    if (lidas % 20 == 0 || lidas == total) _biblioteca.update { it.copy(lidas = lidas, total = total) }
+                }
+                val agrupada = withContext(Dispatchers.Default) { agrupar(musicas) }
+                _biblioteca.value = agrupada
+                android.util.Log.i("SongV", "Biblioteca: ${musicas.size} faixas em ${System.currentTimeMillis() - inicio} ms")
+                // Nunca mexe no que está tocando: só resolve as faixas da fila com a biblioteca nova.
+                sincronizarFila()
+                aoTrocarFaixa()
+                restaurarSessaoSeVazio()
+                app.escopo.launch(Dispatchers.IO) { capas.preparar(musicas) }
             } catch (e: Exception) {
-                _estado.value = _estado.value.copy(
-                    carregandoBiblioteca = false,
-                    erro = "Erro ao varrer a biblioteca: ${e.message}"
-                )
+                _biblioteca.update {
+                    it.copy(carregando = false, pronta = true, erro = "Não foi possível ler a biblioteca (${e.message ?: "erro desconhecido"}).")
+                }
             }
         }
     }
 
-    /**
-     * Toca a música no [indice] absoluto da biblioteca completa. Se a fila atual do ExoPlayer não
-     * for a biblioteca inteira (por exemplo, estava tocando uma playlist), a fila é primeiro
-     * restaurada para a biblioteca completa antes de buscar o índice.
-     */
-    fun tocarMusica(indice: Int) {
-        val biblioteca = _estado.value.biblioteca
-        if (indice !in biblioteca.indices) return
+    suspend fun pastasDisponiveis() = app.musicas.pastasDisponiveis()
 
-        if (_estado.value.filaReproducao !== biblioteca) {
-            val mediaItems = biblioteca.map { it.paraMediaItem() }
-            exoPlayer.setMediaItems(mediaItems, indice, 0L)
-            exoPlayer.prepare()
-            _estado.value = _estado.value.copy(filaReproducao = biblioteca)
-        } else {
-            exoPlayer.seekTo(indice, 0L)
+    private fun agrupar(musicas: List<Musica>): EstadoBiblioteca {
+        val ordenadas = musicas.sortedWith(compareBy(comparadorAlfabetico) { it.titulo })
+
+        // Mesmo nome de álbum + mesmo artista do álbum (ou mesma pasta, quando a tag não existe)
+        // = um álbum. Assim coletâneas com vários artistas não viram dez "álbuns" diferentes.
+        val albuns = musicas.filter { it.album.isNotBlank() }
+            .groupBy { m -> normalizarBusca(m.album) + "|" + (m.artistaAlbum.takeIf { it.isNotBlank() }?.let(::normalizarBusca) ?: m.pasta) }
+            .map { (chave, faixas) ->
+                val ordem = faixas.sortedWith(
+                    compareBy<Musica>({ it.disco ?: 1 }, { it.faixa ?: Int.MAX_VALUE }).thenBy(comparadorAlfabetico) { it.titulo },
+                )
+                val principais = faixas.map { it.artistas.first() }.distinct()
+                val artista = faixas.first().artistaAlbum.ifBlank {
+                    if (principais.size > 2) "Vários artistas" else principais.joinToString(", ")
+                }
+                Album(chave, faixas.first().album, artista, faixas.mapNotNull { it.ano }.maxOrNull(), ordem)
+            }
+            .sortedWith(compareBy(comparadorAlfabetico) { it.titulo })
+
+        val faixasPorArtista = LinkedHashMap<String, MutableList<Musica>>()
+        val nomeExibido = HashMap<String, String>()
+        ordenadas.forEach { m ->
+            m.artistas.forEach { a ->
+                val k = normalizarBusca(a)
+                nomeExibido.putIfAbsent(k, a)
+                faixasPorArtista.getOrPut(k) { mutableListOf() } += m
+            }
         }
+        val albunsPorArtista = HashMap<String, MutableList<Album>>()
+        albuns.forEach { al ->
+            al.musicas.flatMap { it.artistas }.map(::normalizarBusca).distinct().forEach { k ->
+                albunsPorArtista.getOrPut(k) { mutableListOf() } += al
+            }
+        }
+        val artistas = faixasPorArtista.map { (k, faixas) ->
+            Artista(nomeExibido.getValue(k), faixas, albunsPorArtista[k].orEmpty().sortedByDescending { it.ano ?: 0 })
+        }.sortedWith(compareBy(comparadorAlfabetico) { it.nome })
 
-        exoPlayer.playWhenReady = true
-        exoPlayer.play()
-        _estado.value = _estado.value.copy(
-            faixaAtual = biblioteca[indice],
-            indiceFilaAtual = indice
+        return EstadoBiblioteca(
+            carregando = false,
+            pronta = true,
+            musicas = ordenadas,
+            albuns = albuns,
+            artistas = artistas,
+            porId = musicas.associateBy { it.id },
+            erro = null,
         )
     }
 
+    fun ordenar(musicas: List<Musica>, ordem: Ordenacao): List<Musica> = when (ordem) {
+        Ordenacao.TITULO -> musicas
+        Ordenacao.ARTISTA -> musicas.sortedWith(compareBy(comparadorAlfabetico) { it.artista })
+        Ordenacao.ALBUM -> musicas.sortedWith(compareBy<Musica, String>(comparadorAlfabetico) { it.album }.thenBy { it.faixa ?: 0 })
+        Ordenacao.RECENTES -> musicas.sortedByDescending { it.adicionadaEmSeg }
+        Ordenacao.DURACAO -> musicas.sortedByDescending { it.duracaoMs }
+    }
+
+    // =========================================================================
+    // Controles
+    // =========================================================================
+
     /**
-     * Toca a música no [indice] da [EstadoPlayer.filaReproducao] atual — usada pela tela de Fila,
-     * que sempre opera sobre o que está tocando agora (seja a biblioteca inteira, uma playlist ou
-     * um artista), diferente de [tocarMusica] que sempre parte da biblioteca completa.
+     * Substitui a fila por [musicas] e toca a partir de [indice]. Com [aleatorio] (ou com o modo
+     * aleatório já ligado) a faixa escolhida toca primeiro e o resto vem embaralhado.
      */
-    fun tocarNaFilaAtual(indice: Int) {
-        val fila = _estado.value.filaReproducao
-        if (indice !in fila.indices) return
-        exoPlayer.seekTo(indice, 0L)
-        exoPlayer.playWhenReady = true
-        exoPlayer.play()
-        _estado.value = _estado.value.copy(
-            faixaAtual = fila[indice],
-            indiceFilaAtual = indice
-        )
+    fun tocar(musicas: List<Musica>, indice: Int = 0, origem: String? = null, aleatorio: Boolean = false) {
+        if (musicas.isEmpty()) return
+        val embaralhar = aleatorio || player.shuffleModeEnabled
+        val inicio = if (aleatorio) Random.nextInt(musicas.size) else indice.coerceIn(0, musicas.lastIndex)
+        app.escopo.launch(Dispatchers.IO) { capas.garantirArquivo(musicas[inicio]) }
+
+        registro.clear()
+        player.shuffleModeEnabled = false
+        player.setMediaItems(musicas.map(::criarItem), inicio, 0L)
+        if (embaralhar) {
+            aplicarOrdem(ordemComPrimeiro(inicio, musicas.size))
+            player.shuffleModeEnabled = true
+        }
+        player.prepare()
+        player.play()
+        _reproducao.update { it.copy(origem = origem) }
     }
 
     fun alternarPlayPause() {
-        if (exoPlayer.isPlaying) exoPlayer.pause() else exoPlayer.play()
-    }
-
-    fun proxima() {
-        if (exoPlayer.hasNextMediaItem()) exoPlayer.seekToNextMediaItem()
-    }
-
-    fun anterior() {
-        if (exoPlayer.hasPreviousMediaItem()) exoPlayer.seekToPreviousMediaItem()
-        else exoPlayer.seekTo(0L)
-    }
-
-    fun buscarPosicao(ms: Long) {
-        exoPlayer.seekTo(ms)
-        _estado.value = _estado.value.copy(posicaoMs = ms)
-    }
-
-    // ---- Tema e cor personalizada (persistidos) ----
-
-    fun definirTema(tema: TemaApp) {
-        viewModelScope.launch { preferencias.salvarTema(tema) }
-    }
-
-    fun definirCorPersonalizada(argb: Int) {
-        viewModelScope.launch {
-            preferencias.salvarCorCustom(argb)
-            preferencias.salvarTema(TemaApp.PERSONALIZADO)
+        when {
+            player.mediaItemCount == 0 -> _biblioteca.value.musicas.takeIf { it.isNotEmpty() }?.let { tocar(it, origem = "Biblioteca", aleatorio = true) }
+            player.isPlaying -> player.pause()
+            else -> {
+                if (player.playbackState == Player.STATE_ENDED) player.seekToDefaultPosition(player.currentMediaItemIndex)
+                if (player.playbackState == Player.STATE_IDLE) player.prepare()
+                player.play()
+            }
         }
     }
 
-    /** Alterna claro/escuro sem alterar o [TemaApp] (cor de destaque) selecionado. */
-    fun alternarLuminosidade() {
-        viewModelScope.launch { preferencias.alternarLuminosidade() }
+    fun proxima() = player.seekToNext()
+
+    /** Como nos players comuns: depois de 3 s volta ao começo da faixa; antes disso vai para a anterior. */
+    fun anterior() = player.seekToPrevious()
+
+    fun buscar(ms: Long) = player.seekTo(ms)
+
+    fun alternarAleatorio() {
+        if (player.shuffleModeEnabled) {
+            player.shuffleModeEnabled = false
+        } else if (player.mediaItemCount > 0) {
+            // A ordem aleatória padrão pode deixar faixas "antes" da atual (e elas nunca tocariam).
+            // Montamos a nossa: atual primeiro, todo o resto embaralhado depois.
+            aplicarOrdem(ordemComPrimeiro(player.currentMediaItemIndex, player.mediaItemCount))
+            player.shuffleModeEnabled = true
+        } else {
+            player.shuffleModeEnabled = true
+        }
     }
 
-    // ---- Favoritos ----
-
-    fun alternarFavorito(idMusica: String) {
-        viewModelScope.launch { preferencias.alternarFavorito(idMusica) }
+    fun alternarRepeticao() {
+        player.repeatMode = when (player.repeatMode) {
+            Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+            Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+            else -> Player.REPEAT_MODE_OFF
+        }
     }
 
-    // ---- Playlists ----
+    // ---- Fila ----
 
-    fun criarPlaylist(nome: String) {
-        val nomeLimpo = nome.trim()
-        if (nomeLimpo.isEmpty()) return
-        viewModelScope.launch { preferencias.criarPlaylist(nomeLimpo) }
+    fun tocarItem(item: ItemFila) {
+        val janela = janelaDaChave(item.chave) ?: return
+        player.seekTo(janela, 0L)
+        player.play()
     }
 
-    fun renomearPlaylist(idPlaylist: String, novoNome: String) {
-        val nomeLimpo = novoNome.trim()
-        if (nomeLimpo.isEmpty()) return
-        viewModelScope.launch { preferencias.renomearPlaylist(idPlaylist, nomeLimpo) }
-    }
-
-    fun excluirPlaylist(idPlaylist: String) {
-        viewModelScope.launch { preferencias.excluirPlaylist(idPlaylist) }
-    }
-
-    fun adicionarMusicaNaPlaylist(idPlaylist: String, idMusica: String) {
-        viewModelScope.launch { preferencias.adicionarMusicaNaPlaylist(idPlaylist, idMusica) }
-    }
-
-    fun removerMusicaDaPlaylist(idPlaylist: String, idMusica: String) {
-        viewModelScope.launch { preferencias.removerMusicaDaPlaylist(idPlaylist, idMusica) }
-    }
-
-    /**
-     * Toca uma lista arbitrária de músicas (playlist ou faixas de um artista), substituindo a
-     * fila do ExoPlayer por ela e começando pelo [indiceInicial]. A biblioteca completa
-     * ([EstadoPlayer.biblioteca]) não é afetada — a tela inicial continua mostrando todas as
-     * músicas normalmente, só a reprodução em si passa a seguir essa lista específica.
-     */
-    fun tocarLista(musicas: List<Musica>, indiceInicial: Int = 0) {
+    /** Coloca [musicas] logo depois da faixa atual — inclusive no modo aleatório. */
+    fun tocarAseguir(musicas: List<Musica>) {
         if (musicas.isEmpty()) return
-        val indice = indiceInicial.coerceIn(0, musicas.lastIndex)
-        val mediaItems = musicas.map { it.paraMediaItem() }
-        exoPlayer.setMediaItems(mediaItems, indice, 0L)
-        exoPlayer.prepare()
-        exoPlayer.playWhenReady = true
-        exoPlayer.play()
-        _estado.value = _estado.value.copy(
-            filaReproducao = musicas,
-            faixaAtual = musicas[indice],
-            indiceFilaAtual = indice
-        )
-    }
-
-    // ---- Busca ----
-
-    fun definirTermoBusca(termo: String) {
-        _estado.value = _estado.value.copy(termoBusca = termo)
-    }
-
-    // ---- Shuffle / repeat ----
-
-    fun alternarEmbaralhado() {
-        val novoValor = !exoPlayer.shuffleModeEnabled
-        exoPlayer.shuffleModeEnabled = novoValor
-        _estado.value = _estado.value.copy(embaralhado = novoValor)
-    }
-
-    fun alternarModoRepeticao() {
-        val proximo = when (_estado.value.modoRepeticao) {
-            ModoRepeticao.DESLIGADO -> ModoRepeticao.REPETIR_TUDO
-            ModoRepeticao.REPETIR_TUDO -> ModoRepeticao.REPETIR_UMA
-            ModoRepeticao.REPETIR_UMA -> ModoRepeticao.DESLIGADO
+        if (player.mediaItemCount == 0) return tocar(musicas, origem = "Fila")
+        val itens = musicas.map(::criarItem)
+        if (!player.shuffleModeEnabled) {
+            player.addMediaItems(player.currentMediaItemIndex + 1, itens)
+        } else {
+            val ordem = ordemAtual().toMutableList()
+            val n = player.mediaItemCount
+            player.addMediaItems(n, itens)
+            ordem.addAll(ordem.indexOf(player.currentMediaItemIndex) + 1, (n until n + itens.size).toList())
+            aplicarOrdem(ordem)
         }
-        exoPlayer.repeatMode = when (proximo) {
-            ModoRepeticao.DESLIGADO -> Player.REPEAT_MODE_OFF
-            ModoRepeticao.REPETIR_TUDO -> Player.REPEAT_MODE_ALL
-            ModoRepeticao.REPETIR_UMA -> Player.REPEAT_MODE_ONE
+        avisar(if (musicas.size == 1) "Vai tocar a seguir" else "${musicas.size} faixas vão tocar a seguir")
+    }
+
+    fun adicionarAFila(musicas: List<Musica>) {
+        if (musicas.isEmpty()) return
+        if (player.mediaItemCount == 0) return tocar(musicas, origem = "Fila")
+        val ordem = ordemAtual()
+        val n = player.mediaItemCount
+        player.addMediaItems(musicas.map(::criarItem))
+        if (player.shuffleModeEnabled) aplicarOrdem(ordem + (n until n + musicas.size))
+        avisar(if (musicas.size == 1) "Adicionada ao fim da fila" else "${musicas.size} faixas adicionadas à fila")
+    }
+
+    fun removerDaFila(item: ItemFila) {
+        janelaDaChave(item.chave)?.let(player::removeMediaItem)
+    }
+
+    /** Move uma faixa da fila; [de] e [para] são posições na ordem de reprodução. */
+    fun moverNaFila(de: Int, para: Int) {
+        val ordem = ordemAtual()
+        if (de !in ordem.indices || para !in ordem.indices || de == para) return
+        if (player.shuffleModeEnabled) {
+            aplicarOrdem(ordem.toMutableList().apply { add(para, removeAt(de)) })
+        } else {
+            player.moveMediaItem(ordem[de], ordem[para])
         }
-        _estado.value = _estado.value.copy(modoRepeticao = proximo)
     }
 
-    // ---- Fila reordenável ----
-
-    /**
-     * Move uma faixa da fila (posição absoluta em [EstadoPlayer.filaReproducao]) para outra
-     * posição, refletindo no ExoPlayer e no estado local ao mesmo tempo para manter os dois em
-     * sincronia.
-     */
-    fun moverNaFila(deIndice: Int, paraIndice: Int) {
-        val listaAtual = _estado.value.filaReproducao
-        if (deIndice !in listaAtual.indices || paraIndice !in listaAtual.indices) return
-
-        exoPlayer.moveMediaItem(deIndice, paraIndice)
-
-        val novaLista = listaAtual.toMutableList()
-        val item = novaLista.removeAt(deIndice)
-        novaLista.add(paraIndice, item)
-
-        val novoIndiceAtual = exoPlayer.currentMediaItemIndex
-
-        _estado.value = _estado.value.copy(
-            filaReproducao = novaLista,
-            indiceFilaAtual = novoIndiceAtual,
-            faixaAtual = novaLista.getOrNull(novoIndiceAtual)
-        )
-    }
-
-    // ---- Tradução de letra ----
-
-    /** true se o aparelho tem conexão disponível agora — usado pra decidir se mostra o botão de traduzir. */
-    fun temConexaoParaTraducao(): Boolean = tradutor.temConexaoDisponivel()
-
-    fun definirIdiomaTraducao(codigo: String) {
-        _estado.value = _estado.value.copy(idiomaTraducao = codigo, mostrandoTraducao = false)
-    }
-
-    /** Alterna entre mostrar a letra original e a tradução em cache, sem rebuscar nada. */
-    fun alternarMostrarTraducao() {
-        _estado.value = _estado.value.copy(mostrandoTraducao = !_estado.value.mostrandoTraducao)
-    }
-
-    /**
-     * Busca a tradução da letra da [musica] atual no idioma selecionado. Se já estiver em cache
-     * pra essa combinação música+idioma, só ativa a exibição sem chamar a rede de novo.
-     */
-    fun traduzirLetraAtual(musica: Musica) {
-        if (musica.letra.isEmpty()) return
-
-        val chave = _estado.value.chaveTraducao(musica.id)
-        if (_estado.value.letrasTraduzidas.containsKey(chave)) {
-            _estado.value = _estado.value.copy(mostrandoTraducao = true, erroTraducao = null)
-            return
+    fun limparAseguir() {
+        val ordem = ordemAtual()
+        val posicao = ordem.indexOf(player.currentMediaItemIndex)
+        if (posicao < 0) return
+        if (!player.shuffleModeEnabled) {
+            player.removeMediaItems(player.currentMediaItemIndex + 1, player.mediaItemCount)
+        } else {
+            ordem.drop(posicao + 1).sortedDescending().forEach(player::removeMediaItem)
         }
+    }
 
+    // ---- Timer ----
+
+    fun timerEmMinutos(minutos: Int) {
+        TimerSono.emMinutos(player, minutos)
+        avisar("O SongV pausa em $minutos minutos")
+    }
+
+    fun timerFimDaFaixa() {
+        TimerSono.aoFimDaFaixa(player)
+        avisar("O SongV pausa quando esta faixa acabar")
+    }
+
+    fun cancelarTimer() = TimerSono.cancelar(player)
+
+    // =========================================================================
+    // Letra, tradução e sincronia
+    // =========================================================================
+
+    private fun aoTrocarFaixa() {
+        val m = _reproducao.value.atual
+        if (m?.id == _letra.value.musicaId && _letra.value.letra != null) return
+        jobLetra?.cancel()
+        jobTraducao?.cancel()
+        _letra.value = EstadoLetra(musicaId = m?.id)
+        if (m == null) return
+        jobLetra = viewModelScope.launch {
+            val letra = app.letras.carregar(m)
+            _letra.update { if (it.musicaId == m.id) it.copy(letra = letra) else it }
+            if (preferencias.value.traduzirAutomaticamente && letra.linhas.isNotEmpty()) {
+                traduzir(m, letra, preferencias.value.idiomaTraducao)
+            }
+        }
+    }
+
+    /** Liga a tradução (e a deixa ligada nas próximas faixas) no idioma escolhido. */
+    fun ativarTraducao(idioma: String = preferencias.value.idiomaTraducao) {
         viewModelScope.launch {
-            _estado.value = _estado.value.copy(traduzindo = true, erroTraducao = null)
+            prefs.definirIdiomaTraducao(idioma)
+            prefs.definirTraduzirAutomaticamente(true)
+        }
+        val m = _reproducao.value.atual ?: return
+        val letra = _letra.value.letra?.takeIf { it.linhas.isNotEmpty() } ?: return
+        traduzir(m, letra, idioma)
+    }
 
-            val resultado = tradutor.traduzir(
-                linhas = musica.letra.map { it.texto },
-                idiomaDestino = _estado.value.idiomaTraducao
-            )
+    fun desativarTraducao() {
+        jobTraducao?.cancel()
+        viewModelScope.launch { prefs.definirTraduzirAutomaticamente(false) }
+        _letra.update { it.copy(traducao = null, traduzindo = false, avisoTraducao = null) }
+    }
 
-            _estado.value = when (resultado) {
-                is ResultadoTraducao.Sucesso -> _estado.value.copy(
-                    traduzindo = false,
-                    mostrandoTraducao = true,
-                    letrasTraduzidas = _estado.value.letrasTraduzidas + (chave to resultado.linhasTraduzidas)
-                )
-                ResultadoTraducao.SemConexao -> _estado.value.copy(
-                    traduzindo = false,
-                    erroTraducao = "Sem conexão com a internet. Conecte-se ao wifi ou dados móveis para traduzir."
-                )
-                ResultadoTraducao.Falha -> _estado.value.copy(
-                    traduzindo = false,
-                    erroTraducao = "Não foi possível traduzir agora. Tente novamente."
-                )
+    private fun traduzir(m: Musica, letra: Letra, idioma: String) {
+        jobTraducao?.cancel()
+        jobTraducao = viewModelScope.launch {
+            _letra.update { it.copy(traduzindo = true, avisoTraducao = null) }
+            val resultado = app.tradutor.traduzir(letra.linhas.map { it.texto }, idioma)
+            if (_letra.value.musicaId != m.id) return@launch
+            when (resultado) {
+                is TradutorLetra.Resultado.Sucesso ->
+                    _letra.update { it.copy(traducao = resultado.traducao, traduzindo = false) }
+                is TradutorLetra.Resultado.MesmoIdioma ->
+                    _letra.update { it.copy(traducao = null, traduzindo = false, avisoTraducao = "A letra já está em ${nomeIdioma(idioma)}") }
+                TradutorLetra.Resultado.SemConexao -> {
+                    _letra.update { it.copy(traduzindo = false) }
+                    avisar("Sem internet para traduzir. A letra original continua aqui.")
+                }
+                TradutorLetra.Resultado.Falha -> {
+                    _letra.update { it.copy(traduzindo = false) }
+                    avisar("A tradução não respondeu agora.", "Tentar de novo") { traduzir(m, letra, idioma) }
+                }
             }
         }
     }
 
-    private fun iniciarLoopProgresso() {
-        jobProgresso?.cancel()
-        jobProgresso = viewModelScope.launch {
-            while (true) {
-                if (exoPlayer.isPlaying) {
-                    _estado.value = _estado.value.copy(posicaoMs = exoPlayer.currentPosition)
+    fun buscarLetraOnline() {
+        val m = _reproducao.value.atual ?: return
+        if (_letra.value.buscando) return
+        viewModelScope.launch {
+            _letra.update { it.copy(buscando = true) }
+            val r = app.letras.buscarOnline(m)
+            _letra.update { it.copy(buscando = false) }
+            when (r) {
+                is LetraRepository.ResultadoBusca.Encontrada -> {
+                    aplicarLetraNova(m, r.letra)
+                    avisar(if (r.letra.tipo == TipoLetra.SINCRONIZADA) "Letra sincronizada encontrada" else "Letra encontrada, mas sem sincronia")
                 }
-                delay(200L) // granularidade suficiente para destacar a linha de letra certa
+                LetraRepository.ResultadoBusca.Instrumental -> avisar("Esta faixa está marcada como instrumental na LRCLIB.")
+                LetraRepository.ResultadoBusca.NaoEncontrada -> avisar("Nenhuma letra encontrada para “${m.titulo}”.")
+                LetraRepository.ResultadoBusca.SemConexao -> avisar("Sem internet. Conecte-se para buscar a letra.")
+                LetraRepository.ResultadoBusca.Falha -> avisar("A busca falhou.", "Tentar de novo") { buscarLetraOnline() }
             }
         }
+    }
+
+    fun importarLetra(uri: Uri) {
+        val m = _reproducao.value.atual ?: return
+        viewModelScope.launch {
+            val letra = app.letras.importar(m, uri)
+            if (letra == null) {
+                avisar("Esse arquivo não parece conter uma letra.")
+            } else {
+                aplicarLetraNova(m, letra)
+                avisar("Letra importada")
+            }
+        }
+    }
+
+    fun removerLetraSalva() {
+        val m = _reproducao.value.atual ?: return
+        viewModelScope.launch {
+            app.letras.removerSalva(m)
+            val letra = app.letras.carregar(m)
+            aplicarLetraNova(m, letra)
+            avisar("Voltando para a letra do arquivo")
+        }
+    }
+
+    private fun aplicarLetraNova(m: Musica, letra: Letra) {
+        jobTraducao?.cancel()
+        _letra.update { if (it.musicaId == m.id) it.copy(letra = letra, traducao = null, avisoTraducao = null, traduzindo = false) else it }
+        _biblioteca.update { b ->
+            val nova = m.copy(tipoLetra = letra.tipo)
+            b.copy(musicas = b.musicas.map { if (it.id == m.id) nova else it }, porId = b.porId + (m.id to nova))
+        }
+        if (preferencias.value.traduzirAutomaticamente && letra.linhas.isNotEmpty()) traduzir(m, letra, preferencias.value.idiomaTraducao)
+    }
+
+    fun temLetraSalva(): Boolean = _reproducao.value.atual?.let(app.letras::temLetraSalva) ?: false
+
+    /** Adianta (+) ou atrasa (−) a letra desta faixa, em milissegundos. Fica salvo por faixa. */
+    fun ajustarAtraso(deltaMs: Long) {
+        val m = _reproducao.value.atual ?: return
+        val atual = preferencias.value.atrasosLetra[m.id] ?: 0L
+        viewModelScope.launch { prefs.definirAtrasoLetra(m.id, if (deltaMs == 0L) 0L else atual + deltaMs) }
+    }
+
+    // =========================================================================
+    // Favoritos, playlists, preferências
+    // =========================================================================
+
+    fun alternarFavorito(id: String) {
+        viewModelScope.launch { prefs.alternarFavorito(id) }
+    }
+
+    fun criarPlaylist(nome: String, ids: List<String> = emptyList()) {
+        val limpo = nome.trim().ifEmpty { return }
+        viewModelScope.launch {
+            prefs.salvarPlaylists { it + Playlist(System.currentTimeMillis().toString(), limpo, ids.distinct()) }
+        }
+        avisar(if (ids.isEmpty()) "Playlist “$limpo” criada" else "Adicionada à nova playlist “$limpo”")
+    }
+
+    fun renomearPlaylist(id: String, nome: String) {
+        val limpo = nome.trim().ifEmpty { return }
+        viewModelScope.launch { prefs.salvarPlaylists { l -> l.map { if (it.id == id) it.copy(nome = limpo) else it } } }
+    }
+
+    fun excluirPlaylist(id: String) {
+        val removida = preferencias.value.playlists.firstOrNull { it.id == id } ?: return
+        val posicao = preferencias.value.playlists.indexOf(removida)
+        viewModelScope.launch { prefs.salvarPlaylists { l -> l.filterNot { it.id == id } } }
+        avisar("Playlist “${removida.nome}” excluída", "Desfazer") {
+            viewModelScope.launch {
+                prefs.salvarPlaylists { l -> l.toMutableList().apply { add(posicao.coerceAtMost(size), removida) } }
+            }
+        }
+    }
+
+    fun adicionarNaPlaylist(idPlaylist: String, ids: List<String>) {
+        val playlist = preferencias.value.playlists.firstOrNull { it.id == idPlaylist } ?: return
+        val novos = ids.filterNot { it in playlist.musicasIds }.distinct()
+        if (novos.isEmpty()) return avisar("Já está em “${playlist.nome}”")
+        viewModelScope.launch {
+            prefs.salvarPlaylists { l -> l.map { if (it.id == idPlaylist) it.copy(musicasIds = it.musicasIds + novos) else it } }
+        }
+        avisar("Adicionada a “${playlist.nome}”")
+    }
+
+    fun removerDaPlaylist(idPlaylist: String, idMusica: String) {
+        viewModelScope.launch {
+            prefs.salvarPlaylists { l -> l.map { if (it.id == idPlaylist) it.copy(musicasIds = it.musicasIds - idMusica) else it } }
+        }
+    }
+
+    fun moverNaPlaylist(idPlaylist: String, de: Int, para: Int) {
+        viewModelScope.launch {
+            prefs.salvarPlaylists { l ->
+                l.map { p ->
+                    if (p.id != idPlaylist || de !in p.musicasIds.indices || para !in p.musicasIds.indices) p
+                    else p.copy(musicasIds = p.musicasIds.toMutableList().apply { add(para, removeAt(de)) })
+                }
+            }
+        }
+    }
+
+    fun definirModoTema(m: ModoTema) = viewModelScope.launch { prefs.definirModoTema(m) }
+    fun definirDestaque(d: Destaque) = viewModelScope.launch { prefs.definirDestaque(d) }
+    fun definirCorPersonalizada(argb: Int) = viewModelScope.launch { prefs.definirCorPersonalizada(argb) }
+    fun definirCoresDaCapa(v: Boolean) = viewModelScope.launch { prefs.definirCoresDaCapa(v) }
+    fun definirOrdenacao(o: Ordenacao) = viewModelScope.launch { prefs.definirOrdenacao(o) }
+    fun definirExibicaoTraducao(e: ExibicaoTraducao) = viewModelScope.launch { prefs.definirExibicaoTraducao(e) }
+    fun definirRomanizacao(v: Boolean) = viewModelScope.launch { prefs.definirRomanizacao(v) }
+    fun definirEscalaLetra(v: Float) = viewModelScope.launch { prefs.definirEscalaLetra(v) }
+    fun definirBuscaOnline(v: Boolean) = viewModelScope.launch { prefs.definirBuscaOnline(v) }
+    fun registrarBusca(termo: String) = viewModelScope.launch { prefs.registrarBusca(termo) }
+    fun limparBuscas() = viewModelScope.launch { prefs.limparBuscas() }
+
+    fun definirPasta(pasta: String) = viewModelScope.launch {
+        prefs.definirPasta(pasta)
+        preferencias.first { it.pastaBiblioteca == pasta }
+        carregarBiblioteca(forcar = true)
+    }
+
+    fun definirIgnorarCurtas(v: Boolean) = viewModelScope.launch {
+        prefs.definirIgnorarCurtas(v)
+        preferencias.first { it.ignorarCurtas == v }
+        carregarBiblioteca(forcar = true)
+    }
+
+    fun avisar(texto: String, acao: String? = null, aoAgir: (() -> Unit)? = null) {
+        _mensagens.tryEmit(Mensagem(texto, acao, aoAgir))
+    }
+
+    // =========================================================================
+    // Sincronização com o player
+    // =========================================================================
+
+    private fun criarItem(m: Musica): MediaItem {
+        val chave = "${m.id}#${contador.incrementAndGet()}"
+        registro[chave] = m
+        return MediaItem.Builder()
+            .setMediaId(chave)
+            .setUri(m.uri)
+            .setMediaMetadata(
+                MediaMetadata.Builder()
+                    .setTitle(m.titulo)
+                    .setArtist(m.artista)
+                    .setAlbumTitle(m.album.ifBlank { null })
+                    .setAlbumArtist(m.artistaAlbum.ifBlank { null })
+                    .setArtworkUri(capas.uriArtwork(m))
+                    .setIsPlayable(true)
+                    .setIsBrowsable(false)
+                    .build(),
+            )
+            .build()
+    }
+
+    private fun musicaDaChave(chave: String): Musica? =
+        registro[chave] ?: _biblioteca.value.porId[chave.substringBefore('#')]?.also { registro[chave] = it }
+
+    private fun janelaDaChave(chave: String): Int? =
+        (0 until player.mediaItemCount).firstOrNull { player.getMediaItemAt(it).mediaId == chave }
+
+    /** Janelas na ordem em que vão tocar (considera o modo aleatório; ignora a repetição). */
+    private fun ordemAtual(): List<Int> = ordemDe(player.currentTimeline, player.shuffleModeEnabled)
+
+    private fun ordemDe(tl: Timeline, aleatorio: Boolean): List<Int> {
+        if (tl.isEmpty) return emptyList()
+        val ordem = ArrayList<Int>(tl.windowCount)
+        var i = tl.getFirstWindowIndex(aleatorio)
+        while (i != C.INDEX_UNSET && ordem.size < tl.windowCount) {
+            ordem += i
+            i = tl.getNextWindowIndex(i, Player.REPEAT_MODE_OFF, aleatorio)
+        }
+        return ordem
+    }
+
+    private fun ordemComPrimeiro(primeiro: Int, total: Int): List<Int> =
+        listOf(primeiro) + (0 until total).filter { it != primeiro }.shuffled()
+
+    private fun aplicarOrdem(ordem: List<Int>) {
+        if (ordem.size != player.mediaItemCount) return
+        player.setShuffleOrder(DefaultShuffleOrder(ordem.toIntArray(), Random.nextLong()))
+    }
+
+    private fun sincronizarFila() {
+        val ordem = ordemAtual()
+        val atual = player.currentMediaItemIndex
+        val itens = ArrayList<ItemFila>(ordem.size)
+        for (j in ordem) {
+            val chave = player.getMediaItemAt(j).mediaId
+            val m = musicaDaChave(chave) ?: continue
+            itens += ItemFila(chave, m, j)
+        }
+        _reproducao.update { estadoComFlags(it.copy(fila = itens, posicao = itens.indexOfFirst { i -> i.janela == atual })) }
+    }
+
+    private fun sincronizarEstado() {
+        _reproducao.update { estadoComFlags(it) }
+    }
+
+    private fun estadoComFlags(e: EstadoReproducao) = e.copy(
+        tocando = player.isPlaying,
+        carregando = player.playbackState == Player.STATE_BUFFERING,
+        aleatorio = player.shuffleModeEnabled,
+        repeticao = when (player.repeatMode) {
+            Player.REPEAT_MODE_ALL -> ModoRepeticao.TUDO
+            Player.REPEAT_MODE_ONE -> ModoRepeticao.UMA
+            else -> ModoRepeticao.DESLIGADO
+        },
+    )
+
+    private fun duracaoAtual(): Long =
+        player.duration.takeIf { it != C.TIME_UNSET && it > 0 } ?: _reproducao.value.atual?.duracaoMs ?: 0L
+
+    /**
+     * Conta a reprodução (histórico e "mais tocadas") só depois que a faixa tocou de verdade:
+     * metade da duração, entre 10 e 30 segundos — a mesma ideia do scrobble do Last.fm. Assim,
+     * pular faixas não infla o ranking.
+     */
+    private fun registrarReproducao() {
+        val chave = player.currentMediaItem?.mediaId ?: return
+        if (chave == ultimoRegistrado || (jobRegistro?.isActive == true && chaveEmContagem == chave)) return
+        jobRegistro?.cancel()
+        chaveEmContagem = chave
+        jobRegistro = viewModelScope.launch {
+            val alvo = (duracaoAtual() / 2).coerceIn(10_000, 30_000)
+            var ouvido = 0L
+            while (ouvido < alvo) {
+                delay(1_000)
+                if (player.currentMediaItem?.mediaId != chave) return@launch
+                if (player.isPlaying) ouvido += 1_000
+            }
+            ultimoRegistrado = chave
+            val id = chave.substringBefore('#')
+            app.escopo.launch { prefs.registrarReproducao(id) }
+        }
+    }
+
+    // ---- Sessão (retomar de onde parou) ----
+
+    fun salvarSessao() {
+        val n = player.mediaItemCount
+        if (n == 0) return
+        val sessao = Sessao(
+            ids = (0 until n).map { player.getMediaItemAt(it).mediaId.substringBefore('#') },
+            indice = player.currentMediaItemIndex,
+            posicaoMs = player.currentPosition.coerceAtLeast(0),
+            ordemAleatoria = if (player.shuffleModeEnabled) ordemAtual() else null,
+            repeticao = player.repeatMode,
+            origem = _reproducao.value.origem,
+        )
+        app.escopo.launch { prefs.salvarSessao(sessao) }
+    }
+
+    private suspend fun restaurarSessaoSeVazio() {
+        if (sessaoVerificada) return
+        sessaoVerificada = true
+        if (player.mediaItemCount > 0) return
+        val s = prefs.lerSessao() ?: return
+        val porId = _biblioteca.value.porId
+        val musicas = s.ids.mapNotNull { porId[it] }
+        if (musicas.isEmpty()) return
+        val completa = musicas.size == s.ids.size
+        val indice = if (completa) s.indice.coerceIn(0, musicas.lastIndex)
+        else musicas.indexOfFirst { it.id == s.ids.getOrNull(s.indice) }.coerceAtLeast(0)
+
+        registro.clear()
+        player.setMediaItems(musicas.map(::criarItem), indice, if (completa || musicas[indice].id == s.ids.getOrNull(s.indice)) s.posicaoMs else 0L)
+        val ordem = s.ordemAleatoria
+        if (completa && ordem != null && ordem.size == musicas.size) {
+            aplicarOrdem(ordem)
+            player.shuffleModeEnabled = true
+        }
+        player.repeatMode = s.repeticao
+        player.prepare() // pronta para tocar, mas pausada
+        _reproducao.update { it.copy(origem = s.origem) }
     }
 
     override fun onCleared() {
+        salvarSessao()
+        player.removeListener(ouvinte)
         super.onCleared()
-        jobProgresso?.cancel()
-        // Não chama exoPlayer.release() aqui: o player agora é compartilhado via PlayerHolder e
-        // continua vivo através do MusicPlaybackService (foreground service), permitindo que a
-        // música continue tocando com a notificação ativa mesmo se este ViewModel for destruído
-        // (ex: reconfiguração de tela) ou a Activity for pra segundo plano.
     }
 }
