@@ -1,0 +1,2 @@
+Os arquivos de fonte Archivo (app/src/main/res/font/archivo_*.ttf) sao licenciados
+separadamente pela SIL Open Font License 1.1, cujo texto esta em Archivo-OFL.txt.
