@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.SongV" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#0A0A0A</item>
+        <item name="android:windowBackground">#0A0A0A</item>
+        <item name="android:navigationBarColor">#0A0A0A</item>
+    </style>
+
+    <!--
+      Tema da splash nativa (antes do Compose montar). Usa fundo neutro (preto quase puro) em vez
+      de uma cor de tema específica, para nunca "piscar" a cor de um tema que não é o do usuário —
+      o app troca para a tela real assim que o tema salvo termina de carregar (ver MainActivity).
+    -->
+    <style name="Theme.SongV.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">#0A0A0A</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/Theme.SongV</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:statusBarColor">#0A0A0A</item>
+        <item name="android:navigationBarColor">#0A0A0A</item>
+    </style>
+</resources>

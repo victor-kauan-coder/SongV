@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Nota musical dupla estilizada, cor roxa vibrante sobre fundo roxo escuro -->
+    <path
+        android:pathData="M42,28 L72,20 L72,64 C72,71.2 66.2,77 59,77 C51.8,77 46,71.2 46,64 C46,56.8 51.8,51 59,51 C61.1,51 63.1,51.5 64.8,52.4 L64.8,32.2 L49.2,36.4 L49.2,68 C49.2,75.2 43.4,81 36.2,81 C29,81 23.2,75.2 23.2,68 C23.2,60.8 29,55 36.2,55 C38.3,55 40.3,55.5 42,56.4 Z"
+        android:fillColor="#C77DFF"/>
+</vector>
