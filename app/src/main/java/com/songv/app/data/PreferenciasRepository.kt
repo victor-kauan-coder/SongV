@@ -1,163 +1,260 @@
 package com.songv.app.data
 
 import android.content.Context
-import androidx.core.content.edit
 import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.*
+import androidx.datastore.preferences.core.MutablePreferences
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.songv.app.letra.IDIOMAS_TRADUCAO
+import com.songv.app.letra.TradutorLetra
 import com.songv.app.model.Playlist
-import com.songv.app.ui.theme.ModoLuminosidade
-import com.songv.app.ui.theme.TemaApp
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import androidx.datastore.preferences.core.Preferences // ADD THIS
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.Locale
 
-// Extension property to create the DataStore instance
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "configuracoes")
+
+enum class ModoTema(val rotulo: String) { ESCURO("Escuro"), CLARO("Claro"), SISTEMA("Sistema") }
+
+enum class Destaque(val rotulo: String, val argb: Long) {
+    LARANJA("Laranja", 0xFFFF6B1A),
+    AMBAR("Âmbar", 0xFFFFB020),
+    VERMELHO("Vermelho", 0xFFFF4B4B),
+    ROSA("Rosa", 0xFFFF5C9E),
+    VIOLETA("Violeta", 0xFFA689FF),
+    AZUL("Azul", 0xFF4DA0FF),
+    VERDE("Verde", 0xFF36D07A),
+    PERSONALIZADO("Sua cor", 0xFFFF6B1A),
+}
+
+enum class ExibicaoTraducao(val rotulo: String) { AMBAS("Original + tradução"), SO_TRADUCAO("Só a tradução") }
+
+enum class Ordenacao(val rotulo: String) {
+    TITULO("Título"), ARTISTA("Artista"), ALBUM("Álbum"), RECENTES("Adicionadas recentemente"), DURACAO("Duração")
+}
+
+data class Preferencias(
+    val carregadas: Boolean = false,
+    val modoTema: ModoTema = ModoTema.ESCURO,
+    val destaque: Destaque = Destaque.LARANJA,
+    val corPersonalizada: Int? = null,
+    val coresDaCapa: Boolean = true,
+    val favoritos: Set<String> = emptySet(),
+    val playlists: List<Playlist> = emptyList(),
+    val historico: List<String> = emptyList(),
+    val contagens: Map<String, Int> = emptyMap(),
+    val pastaBiblioteca: String = MusicaRepository.PASTA_PADRAO,
+    val ignorarCurtas: Boolean = true,
+    val ordenacao: Ordenacao = Ordenacao.TITULO,
+    val idiomaTraducao: String = idiomaPadrao(),
+    val traduzirAutomaticamente: Boolean = false,
+    val exibicaoTraducao: ExibicaoTraducao = ExibicaoTraducao.AMBAS,
+    val mostrarRomanizacao: Boolean = true,
+    val escalaLetra: Float = 1f,
+    val buscaOnline: Boolean = true,
+    val atrasosLetra: Map<String, Long> = emptyMap(),
+    val buscasRecentes: List<String> = emptyList(),
+)
+
+/** Estado de reprodução salvo para retomar de onde parou na próxima abertura. */
+data class Sessao(
+    val ids: List<String>,
+    val indice: Int,
+    val posicaoMs: Long,
+    val ordemAleatoria: List<Int>?,
+    val repeticao: Int,
+    val origem: String?,
+)
+
+private fun idiomaPadrao(): String {
+    val sistema = Locale.getDefault().language
+    return IDIOMAS_TRADUCAO.firstOrNull { TradutorLetra.mesmoIdioma(it.codigo, sistema) }?.codigo ?: "pt"
+}
 
 class PreferenciasRepository(private val context: Context) {
 
-    private object Keys {
-        val TEMA = stringPreferencesKey("tema_app")
+    private object K {
+        val MODO_TEMA = stringPreferencesKey("modo_tema")
+        val MODO_LUMINOSIDADE_ANTIGO = stringPreferencesKey("modo_luminosidade")
+        val DESTAQUE = stringPreferencesKey("destaque")
         val COR_CUSTOM = intPreferencesKey("cor_personalizada")
+        val CORES_CAPA = booleanPreferencesKey("cores_da_capa")
         val FAVORITOS = stringSetPreferencesKey("musicas_favoritas")
-        val LUMINOSIDADE = stringPreferencesKey("modo_luminosidade")
-        // Cada playlist é serializada como "id::nome::id1,id2,id3" (sem separadores conflitantes,
-        // já que ids de música e nomes de playlist não contêm "::" nem quebra de linha).
-        val PLAYLISTS = stringSetPreferencesKey("playlists_serializadas")
+        val PLAYLISTS = stringPreferencesKey("playlists_json")
+        val PLAYLISTS_ANTIGAS = stringSetPreferencesKey("playlists_serializadas")
+        val HISTORICO = stringPreferencesKey("historico")
+        val CONTAGENS = stringPreferencesKey("contagens")
+        val PASTA = stringPreferencesKey("pasta_biblioteca")
+        val IGNORAR_CURTAS = booleanPreferencesKey("ignorar_curtas")
+        val ORDENACAO = stringPreferencesKey("ordenacao")
+        val IDIOMA = stringPreferencesKey("idioma_traducao")
+        val AUTO_TRADUZIR = booleanPreferencesKey("traduzir_auto")
+        val EXIBICAO = stringPreferencesKey("exibicao_traducao")
+        val ROMANIZACAO = booleanPreferencesKey("romanizacao")
+        val ESCALA_LETRA = floatPreferencesKey("escala_letra")
+        val BUSCA_ONLINE = booleanPreferencesKey("busca_online")
+        val ATRASOS = stringPreferencesKey("atrasos_letra")
+        val BUSCAS = stringPreferencesKey("buscas_recentes")
+        val SESSAO = stringPreferencesKey("sessao")
     }
 
-    private companion object {
-        const val SEP_CAMPO = "::"
-        const val SEP_MUSICA = ","
+    val preferencias: Flow<Preferencias> = context.dataStore.data.map { p ->
+        Preferencias(
+            carregadas = true,
+            modoTema = p[K.MODO_TEMA]?.let { enumOu(it, ModoTema.ESCURO) }
+                ?: if (p[K.MODO_LUMINOSIDADE_ANTIGO] == "CLARO") ModoTema.CLARO else ModoTema.ESCURO,
+            destaque = p[K.DESTAQUE]?.let { enumOu(it, Destaque.LARANJA) } ?: Destaque.LARANJA,
+            corPersonalizada = p[K.COR_CUSTOM],
+            coresDaCapa = p[K.CORES_CAPA] ?: true,
+            favoritos = p[K.FAVORITOS] ?: emptySet(),
+            playlists = p[K.PLAYLISTS]?.let(::lerPlaylists) ?: p[K.PLAYLISTS_ANTIGAS]?.let(::migrarPlaylistsAntigas).orEmpty(),
+            historico = p[K.HISTORICO]?.let(::lerLista).orEmpty(),
+            contagens = p[K.CONTAGENS]?.let { lerMapa(it) { v -> (v as Number).toInt() } }.orEmpty(),
+            pastaBiblioteca = p[K.PASTA] ?: MusicaRepository.PASTA_PADRAO,
+            ignorarCurtas = p[K.IGNORAR_CURTAS] ?: true,
+            ordenacao = p[K.ORDENACAO]?.let { enumOu(it, Ordenacao.TITULO) } ?: Ordenacao.TITULO,
+            idiomaTraducao = p[K.IDIOMA] ?: idiomaPadrao(),
+            traduzirAutomaticamente = p[K.AUTO_TRADUZIR] ?: false,
+            exibicaoTraducao = p[K.EXIBICAO]?.let { enumOu(it, ExibicaoTraducao.AMBAS) } ?: ExibicaoTraducao.AMBAS,
+            mostrarRomanizacao = p[K.ROMANIZACAO] ?: true,
+            escalaLetra = p[K.ESCALA_LETRA] ?: 1f,
+            buscaOnline = p[K.BUSCA_ONLINE] ?: true,
+            atrasosLetra = p[K.ATRASOS]?.let { lerMapa(it) { v -> (v as Number).toLong() } }.orEmpty(),
+            buscasRecentes = p[K.BUSCAS]?.let(::lerLista).orEmpty(),
+        )
     }
 
-    // Flow for the selected theme
-    val temaFlow: Flow<TemaApp> = context.dataStore.data.map { pref ->
-        val nomeTema = pref[Keys.TEMA] ?: TemaApp.ROXO_DARK.name
-        try {
-            TemaApp.valueOf(nomeTema)
-        } catch (e: Exception) {
-            TemaApp.ROXO_DARK
-        }
+    // ---- Aparência ----
+
+    suspend fun definirModoTema(modo: ModoTema) = editar { it[K.MODO_TEMA] = modo.name }
+    suspend fun definirDestaque(d: Destaque) = editar { it[K.DESTAQUE] = d.name }
+    suspend fun definirCorPersonalizada(argb: Int) = editar {
+        it[K.COR_CUSTOM] = argb
+        it[K.DESTAQUE] = Destaque.PERSONALIZADO.name
+    }
+    suspend fun definirCoresDaCapa(v: Boolean) = editar { it[K.CORES_CAPA] = v }
+
+    // ---- Biblioteca ----
+
+    suspend fun definirPasta(pasta: String) = editar { it[K.PASTA] = pasta }
+    suspend fun definirIgnorarCurtas(v: Boolean) = editar { it[K.IGNORAR_CURTAS] = v }
+    suspend fun definirOrdenacao(o: Ordenacao) = editar { it[K.ORDENACAO] = o.name }
+
+    suspend fun alternarFavorito(id: String) = editar { p ->
+        val atuais = p[K.FAVORITOS] ?: emptySet()
+        p[K.FAVORITOS] = if (id in atuais) atuais - id else atuais + id
     }
 
-    // Flow for the custom ARGB color
-    val corCustomFlow: Flow<Int?> = context.dataStore.data.map { pref ->
-        pref[Keys.COR_CUSTOM]
+    /** Histórico (mais recente primeiro, sem repetição, até 60) e contagem de reproduções. */
+    suspend fun registrarReproducao(id: String) = editar { p ->
+        val historico = listOf(id) + (p[K.HISTORICO]?.let(::lerLista).orEmpty() - id)
+        p[K.HISTORICO] = JSONArray(historico.take(60)).toString()
+        val contagens = p[K.CONTAGENS]?.let { lerMapa(it) { v -> (v as Number).toInt() } }.orEmpty().toMutableMap()
+        contagens[id] = (contagens[id] ?: 0) + 1
+        p[K.CONTAGENS] = JSONObject(contagens as Map<*, *>).toString()
     }
 
-    // Flow for the set of favorite music IDs
-    val favoritosFlow: Flow<Set<String>> = context.dataStore.data.map { pref ->
-        pref[Keys.FAVORITOS] ?: emptySet()
+    suspend fun registrarBusca(termo: String) = editar { p ->
+        val limpo = termo.trim()
+        if (limpo.length < 2) return@editar
+        val atuais = p[K.BUSCAS]?.let(::lerLista).orEmpty().filterNot { it.equals(limpo, ignoreCase = true) }
+        p[K.BUSCAS] = JSONArray((listOf(limpo) + atuais).take(8)).toString()
     }
 
-    // Flow para o modo de luminosidade (claro/escuro), independente da cor escolhida
-    val luminosidadeFlow: Flow<ModoLuminosidade> = context.dataStore.data.map { pref ->
-        when (pref[Keys.LUMINOSIDADE]) {
-            ModoLuminosidade.CLARO.name -> ModoLuminosidade.CLARO
-            else -> ModoLuminosidade.ESCURO
-        }
-    }
-
-    // Flow para a lista de playlists do usuário
-    val playlistsFlow: Flow<List<Playlist>> = context.dataStore.data.map { pref ->
-        val brutas = pref[Keys.PLAYLISTS] ?: emptySet()
-        brutas.mapNotNull { desserializarPlaylist(it) }
-            .sortedBy { it.id } // ordem de criação, já que o id é baseado em timestamp
-    }
-
-    suspend fun salvarTema(tema: TemaApp) {
-        context.dataStore.edit { pref ->
-            pref[Keys.TEMA] = tema.name
-        }
-    }
-
-    suspend fun salvarCorCustom(argb: Int) {
-        context.dataStore.edit { pref ->
-            pref[Keys.COR_CUSTOM] = argb
-        }
-    }
-
-    suspend fun alternarFavorito(idMusica: String) {
-        context.dataStore.edit { pref ->
-            val atuais = pref[Keys.FAVORITOS] ?: emptySet()
-            val novos = if (atuais.contains(idMusica)) {
-                atuais - idMusica
-            } else {
-                atuais + idMusica
-            }
-            pref[Keys.FAVORITOS] = novos
-        }
-    }
-
-    suspend fun alternarLuminosidade() {
-        context.dataStore.edit { pref ->
-            val atual = pref[Keys.LUMINOSIDADE]
-            pref[Keys.LUMINOSIDADE] = if (atual == ModoLuminosidade.CLARO.name) {
-                ModoLuminosidade.ESCURO.name
-            } else {
-                ModoLuminosidade.CLARO.name
-            }
-        }
-    }
+    suspend fun limparBuscas() = editar { it.remove(K.BUSCAS) }
 
     // ---- Playlists ----
 
-    suspend fun criarPlaylist(nome: String): Playlist {
-        val nova = Playlist(id = System.currentTimeMillis().toString(), nome = nome, musicasIds = emptyList())
-        context.dataStore.edit { pref ->
-            val atuais = pref[Keys.PLAYLISTS] ?: emptySet()
-            pref[Keys.PLAYLISTS] = atuais + serializarPlaylist(nova)
+    suspend fun salvarPlaylists(transformar: (List<Playlist>) -> List<Playlist>) = editar { p ->
+        val atuais = p[K.PLAYLISTS]?.let(::lerPlaylists) ?: p[K.PLAYLISTS_ANTIGAS]?.let(::migrarPlaylistsAntigas).orEmpty()
+        p[K.PLAYLISTS] = escreverPlaylists(transformar(atuais))
+        p.remove(K.PLAYLISTS_ANTIGAS)
+    }
+
+    // ---- Letra ----
+
+    suspend fun definirIdiomaTraducao(codigo: String) = editar { it[K.IDIOMA] = codigo }
+    suspend fun definirTraduzirAutomaticamente(v: Boolean) = editar { it[K.AUTO_TRADUZIR] = v }
+    suspend fun definirExibicaoTraducao(e: ExibicaoTraducao) = editar { it[K.EXIBICAO] = e.name }
+    suspend fun definirRomanizacao(v: Boolean) = editar { it[K.ROMANIZACAO] = v }
+    suspend fun definirEscalaLetra(v: Float) = editar { it[K.ESCALA_LETRA] = v.coerceIn(0.8f, 1.4f) }
+    suspend fun definirBuscaOnline(v: Boolean) = editar { it[K.BUSCA_ONLINE] = v }
+
+    suspend fun definirAtrasoLetra(id: String, ms: Long) = editar { p ->
+        val mapa = p[K.ATRASOS]?.let { lerMapa(it) { v -> (v as Number).toLong() } }.orEmpty().toMutableMap()
+        if (ms == 0L) mapa.remove(id) else mapa[id] = ms
+        p[K.ATRASOS] = JSONObject(mapa as Map<*, *>).toString()
+    }
+
+    // ---- Sessão ----
+
+    suspend fun lerSessao(): Sessao? = runCatching {
+        val bruto = context.dataStore.data.first()[K.SESSAO] ?: return null
+        val o = JSONObject(bruto)
+        Sessao(
+            ids = o.getJSONArray("ids").let { a -> List(a.length()) { a.getString(it) } },
+            indice = o.getInt("indice"),
+            posicaoMs = o.getLong("posicao"),
+            ordemAleatoria = o.optJSONArray("ordem")?.let { a -> List(a.length()) { a.getInt(it) } },
+            repeticao = o.optInt("repeticao"),
+            origem = if (o.isNull("origem")) null else o.optString("origem"),
+        )
+    }.getOrNull()
+
+    suspend fun salvarSessao(s: Sessao) = editar { p ->
+        p[K.SESSAO] = JSONObject()
+            .put("ids", JSONArray(s.ids))
+            .put("indice", s.indice)
+            .put("posicao", s.posicaoMs)
+            .put("ordem", s.ordemAleatoria?.let { JSONArray(it) } ?: JSONObject.NULL)
+            .put("repeticao", s.repeticao)
+            .put("origem", s.origem ?: JSONObject.NULL)
+            .toString()
+    }
+
+    // ---- Utilitários ----
+
+    private suspend fun editar(bloco: (MutablePreferences) -> Unit) {
+        context.dataStore.edit { bloco(it) }
+    }
+
+    private inline fun <reified E : Enum<E>> enumOu(nome: String, padrao: E): E =
+        runCatching { enumValueOf<E>(nome) }.getOrDefault(padrao)
+
+    private fun lerLista(json: String): List<String> = runCatching {
+        JSONArray(json).let { a -> List(a.length()) { a.getString(it) } }
+    }.getOrDefault(emptyList())
+
+    private fun <V> lerMapa(json: String, converter: (Any) -> V): Map<String, V> = runCatching {
+        val o = JSONObject(json)
+        o.keys().asSequence().associateWith { converter(o.get(it)) }
+    }.getOrDefault(emptyMap())
+
+    private fun lerPlaylists(json: String): List<Playlist> = runCatching {
+        val a = JSONArray(json)
+        List(a.length()) { i ->
+            val o = a.getJSONObject(i)
+            Playlist(o.getString("id"), o.getString("nome"), o.getJSONArray("musicas").let { m -> List(m.length()) { m.getString(it) } })
         }
-        return nova
-    }
+    }.getOrDefault(emptyList())
 
-    suspend fun renomearPlaylist(idPlaylist: String, novoNome: String) {
-        atualizarPlaylist(idPlaylist) { it.copy(nome = novoNome) }
-    }
+    private fun escreverPlaylists(lista: List<Playlist>): String = JSONArray().apply {
+        lista.forEach { put(JSONObject().put("id", it.id).put("nome", it.nome).put("musicas", JSONArray(it.musicasIds))) }
+    }.toString()
 
-    suspend fun excluirPlaylist(idPlaylist: String) {
-        context.dataStore.edit { pref ->
-            val atuais = pref[Keys.PLAYLISTS] ?: emptySet()
-            pref[Keys.PLAYLISTS] = atuais.filterNot { desserializarPlaylist(it)?.id == idPlaylist }.toSet()
-        }
-    }
-
-    suspend fun adicionarMusicaNaPlaylist(idPlaylist: String, idMusica: String) {
-        atualizarPlaylist(idPlaylist) { playlist ->
-            if (idMusica in playlist.musicasIds) playlist
-            else playlist.copy(musicasIds = playlist.musicasIds + idMusica)
-        }
-    }
-
-    suspend fun removerMusicaDaPlaylist(idPlaylist: String, idMusica: String) {
-        atualizarPlaylist(idPlaylist) { playlist ->
-            playlist.copy(musicasIds = playlist.musicasIds - idMusica)
-        }
-    }
-
-    private suspend fun atualizarPlaylist(idPlaylist: String, transformar: (Playlist) -> Playlist) {
-        context.dataStore.edit { pref ->
-            val atuais = pref[Keys.PLAYLISTS] ?: emptySet()
-            val novas = atuais.map { bruta ->
-                val playlist = desserializarPlaylist(bruta) ?: return@map bruta
-                if (playlist.id == idPlaylist) serializarPlaylist(transformar(playlist)) else bruta
-            }.toSet()
-            pref[Keys.PLAYLISTS] = novas
-        }
-    }
-
-    private fun serializarPlaylist(playlist: Playlist): String {
-        return "${playlist.id}$SEP_CAMPO${playlist.nome}$SEP_CAMPO${playlist.musicasIds.joinToString(SEP_MUSICA)}"
-    }
-
-    private fun desserializarPlaylist(bruta: String): Playlist? {
-        val partes = bruta.split(SEP_CAMPO, limit = 3)
-        if (partes.size < 2) return null
-        val id = partes[0]
-        val nome = partes[1]
-        val musicasIds = partes.getOrNull(2)?.takeIf { it.isNotBlank() }?.split(SEP_MUSICA) ?: emptyList()
-        return Playlist(id = id, nome = nome, musicasIds = musicasIds)
-    }
+    /** Formato antigo: "id::nome::id1,id2" num StringSet (quebrava com "::" ou "," no nome). */
+    private fun migrarPlaylistsAntigas(antigas: Set<String>): List<Playlist> = antigas.mapNotNull { bruta ->
+        val partes = bruta.split("::", limit = 3)
+        if (partes.size < 2) return@mapNotNull null
+        Playlist(partes[0], partes[1], partes.getOrNull(2)?.takeIf { it.isNotBlank() }?.split(",").orEmpty())
+    }.sortedBy { it.id }
 }

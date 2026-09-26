@@ -2,181 +2,266 @@ package com.songv.app.data
 
 import android.content.ContentUris
 import android.content.Context
-import android.database.Cursor
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.media.MediaMetadataRetriever
+import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
 import com.songv.app.id3.Id3Parser
-import com.songv.app.model.LinhaLetra
+import com.songv.app.letra.Lrc
 import com.songv.app.model.Musica
 import com.songv.app.model.TipoLetra
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
- * Varre o MediaStore em busca de arquivos MP3, filtra pela pasta configurada
- * (padrão "Music"), e para cada um lê as tags ID3 com o [Id3Parser] manual
- * (necessário para extrair SYLT, que bibliotecas prontas não suportam).
+ * Varre o MediaStore e lê as tags de cada faixa.
+ *
+ * Guarda um índice em disco (`biblioteca.json`): na próxima abertura só são relidas as faixas
+ * novas ou modificadas, então a biblioteca aparece praticamente na hora. As tags ID3 têm
+ * prioridade; as colunas do MediaStore servem de reserva (e cobrem M4A/FLAC/OGG, que o
+ * ExoPlayer toca mas o parser ID3 não lê).
  */
 class MusicaRepository(private val context: Context) {
 
-    companion object {
-        private const val TAG = "MusicaRepository"
-        const val PASTA_PADRAO = "Music"
+    private val arquivoIndice = File(context.filesDir, "biblioteca.json")
+    private val pastaLetrasSalvas = File(context.filesDir, "letras")
 
-        /**
-         * Lado máximo (em pixels) para as capas decodificadas em memória. As capas de MP3 costumam
-         * vir em alta resolução (1000px+), mas o app só as exibe como thumbnails pequenos — manter
-         * o bitmap original inteiro por música, multiplicado pela biblioteca toda, é o que causava
-         * o app travar/consumir memória demais ao carregar. 300px é mais que suficiente mesmo para
-         * o círculo de artista ou a capa grande da tela do player.
-         */
-        private const val TAMANHO_MAXIMO_CAPA_PX = 300
-    }
+    private class Linha(
+        val id: Long, val caminho: String, val nome: String, val pastaRelativa: String,
+        val duracao: Long, val adicionada: Long, val modificada: Long, val tamanho: Long,
+        val titulo: String?, val artista: String?, val album: String?, val artistaAlbum: String?,
+        val ano: Int, val faixa: Int,
+    )
 
     /**
-     * Decodifica bytes de imagem (capa embutida no MP3) já reduzida para no máximo
-     * [tamanhoMaximoPx] de lado, sem nunca alocar o bitmap na resolução original.
-     * Usa a técnica padrão do Android: primeiro lê só as dimensões (inJustDecodeBounds),
-     * calcula a potência de 2 mais próxima que atende ao tamanho alvo, e só então decodifica
-     * de fato já reduzido.
+     * @param pasta nome da pasta a considerar (ex.: "Music"); vazio = todas as pastas.
+     * @param ignorarCurtas pula áudios com menos de 30 s (toques, áudios de mensagem…).
      */
-    private fun decodificarCapaReduzida(dados: ByteArray, tamanhoMaximoPx: Int): Bitmap? {
-        val opcoesMedida = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeByteArray(dados, 0, dados.size, opcoesMedida)
-
-        var inSampleSize = 1
-        var largura = opcoesMedida.outWidth
-        var altura = opcoesMedida.outHeight
-        while (largura / 2 >= tamanhoMaximoPx || altura / 2 >= tamanhoMaximoPx) {
-            largura /= 2
-            altura /= 2
-            inSampleSize *= 2
+    @OptIn(ExperimentalCoroutinesApi::class)
+    suspend fun varrer(
+        pasta: String,
+        ignorarCurtas: Boolean,
+        aoProgredir: (lidas: Int, total: Int) -> Unit,
+    ): List<Musica> = withContext(Dispatchers.IO) {
+        val linhas = consultar().filter { l ->
+            (pasta.isBlank() || pertenceAPasta(l, pasta)) && (!ignorarCurtas || l.duracao == 0L || l.duracao >= 30_000)
         }
+        val indice = lerIndice()
+        val lidas = AtomicInteger(0)
+        val leitores = Dispatchers.IO.limitedParallelism(4)
 
-        val opcoesFinais = BitmapFactory.Options().apply { this.inSampleSize = inSampleSize }
-        return BitmapFactory.decodeByteArray(dados, 0, dados.size, opcoesFinais)
+        val musicas = coroutineScope {
+            linhas.map { l ->
+                async(leitores) {
+                    val emCache = indice[l.caminho]?.takeIf { it.id == l.id.toString() && it.modificadoSeg == l.modificada && it.tamanhoBytes == l.tamanho }
+                    val musica = emCache ?: runCatching { construir(l) }.onFailure {
+                        Log.w(TAG, "Falha ao ler ${l.caminho}: ${it.message}")
+                    }.getOrNull()
+                    aoProgredir(lidas.incrementAndGet(), linhas.size)
+                    musica?.let { comLetraSalva(it) }
+                }
+            }.awaitAll().filterNotNull()
+        }
+        salvarIndice(musicas)
+        musicas
     }
 
-    /**
-     * Varre o armazenamento em busca de MP3s dentro de [pastaFiltro] (relativa, ex: "Music").
-     * Passe null para varrer todas as pastas.
-     */
-    suspend fun varrer(pastaFiltro: String? = PASTA_PADRAO): List<Musica> = withContext(Dispatchers.IO) {
-        val resultado = mutableListOf<Musica>()
+    /** Pastas (primeiro nível, ex.: "Music", "Download") que contêm música — para o filtro nas configurações. */
+    suspend fun pastasDisponiveis(): List<Pair<String, Int>> = withContext(Dispatchers.IO) {
+        consultar().groupingBy { it.pastaRelativa.trim('/').substringBefore('/') }
+            .eachCount()
+            .filterKeys { it.isNotBlank() }
+            .toList()
+            .sortedByDescending { it.second }
+    }
 
-        val projecao = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.DATA, // caminho absoluto no disco
-            MediaStore.Audio.Media.DISPLAY_NAME,
-            MediaStore.Audio.Media.RELATIVE_PATH,
-            MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.MIME_TYPE
+    private fun pertenceAPasta(l: Linha, pasta: String): Boolean =
+        l.pastaRelativa.trim('/').substringBefore('/').equals(pasta, ignoreCase = true)
+
+    private fun consultar(): List<Linha> {
+        val colunas = mutableListOf(
+            MediaStore.Audio.Media._ID, MediaStore.Audio.Media.DATA, MediaStore.Audio.Media.DISPLAY_NAME,
+            MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.DATE_ADDED, MediaStore.Audio.Media.DATE_MODIFIED,
+            MediaStore.Audio.Media.SIZE, MediaStore.Audio.Media.TITLE, MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.ALBUM, MediaStore.Audio.Media.YEAR, MediaStore.Audio.Media.TRACK,
         )
+        // RELATIVE_PATH só existe a partir do Android 10 e ALBUM_ARTIST a partir do 11. Pedir uma
+        // coluna inexistente derruba a consulta inteira — era por isso que a biblioteca não
+        // carregava no Android 8 e 9.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) colunas += MediaStore.Audio.Media.RELATIVE_PATH
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) colunas += MediaStore.Audio.Media.ALBUM_ARTIST
 
-        val selecao = "${MediaStore.Audio.Media.MIME_TYPE} = ?"
-        val selecaoArgs = arrayOf("audio/mpeg")
-
-        val cursor: Cursor? = context.contentResolver.query(
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            projecao,
-            selecao,
-            selecaoArgs,
-            "${MediaStore.Audio.Media.DISPLAY_NAME} ASC"
-        )
-
-        cursor?.use { c ->
-            val idCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-            val dataCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
-            val nomeCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DISPLAY_NAME)
-            val caminhoRelCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.RELATIVE_PATH)
-            val duracaoCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+        val selecao = "${MediaStore.Audio.Media.IS_MUSIC} != 0 OR ${MediaStore.Audio.Media.MIME_TYPE} = 'audio/mpeg'"
+        val resultado = mutableListOf<Linha>()
+        context.contentResolver.query(
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, colunas.toTypedArray(), selecao, null, null,
+        )?.use { c ->
+            fun idx(nome: String) = c.getColumnIndex(nome)
+            val iId = idx(MediaStore.Audio.Media._ID)
+            val iDados = idx(MediaStore.Audio.Media.DATA)
+            val iNome = idx(MediaStore.Audio.Media.DISPLAY_NAME)
+            val iDur = idx(MediaStore.Audio.Media.DURATION)
+            val iAdd = idx(MediaStore.Audio.Media.DATE_ADDED)
+            val iMod = idx(MediaStore.Audio.Media.DATE_MODIFIED)
+            val iTam = idx(MediaStore.Audio.Media.SIZE)
+            val iTit = idx(MediaStore.Audio.Media.TITLE)
+            val iArt = idx(MediaStore.Audio.Media.ARTIST)
+            val iAlb = idx(MediaStore.Audio.Media.ALBUM)
+            val iAno = idx(MediaStore.Audio.Media.YEAR)
+            val iFaixa = idx(MediaStore.Audio.Media.TRACK)
+            val iRel = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) idx(MediaStore.Audio.Media.RELATIVE_PATH) else -1
+            val iArtAlb = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) idx(MediaStore.Audio.Media.ALBUM_ARTIST) else -1
 
             while (c.moveToNext()) {
-                try {
-                    val id = c.getLong(idCol)
-                    val caminho = c.getString(dataCol) ?: continue
-                    val nomeArquivo = c.getString(nomeCol) ?: caminho.substringAfterLast('/')
-                    val caminhoRelativo = c.getString(caminhoRelCol) ?: ""
-                    val duracaoMediaStore = c.getLong(duracaoCol)
+                val caminho = c.getString(iDados) ?: continue
+                val relativa = if (iRel >= 0) c.getString(iRel).orEmpty() else relativaDoCaminho(caminho)
+                resultado += Linha(
+                    id = c.getLong(iId),
+                    caminho = caminho,
+                    nome = c.getString(iNome) ?: caminho.substringAfterLast('/'),
+                    pastaRelativa = relativa,
+                    duracao = c.getLong(iDur),
+                    adicionada = c.getLong(iAdd),
+                    modificada = c.getLong(iMod),
+                    tamanho = c.getLong(iTam),
+                    titulo = c.getString(iTit),
+                    artista = c.getString(iArt)?.takeUnless { it == "<unknown>" },
+                    // Sem tag de álbum, o MediaStore usa o nome da pasta — isso criaria álbuns falsos.
+                    album = c.getString(iAlb)?.takeUnless { it == "<unknown>" || it == caminho.substringBeforeLast('/').substringAfterLast('/') },
+                    artistaAlbum = if (iArtAlb >= 0) c.getString(iArtAlb) else null,
+                    ano = c.getInt(iAno),
+                    faixa = c.getInt(iFaixa),
+                )
+            }
+        }
+        return resultado
+    }
 
-                    // Filtra pela pasta configurada, se houver
-                    if (pastaFiltro != null && !caminhoRelativo.contains(pastaFiltro, ignoreCase = true)) {
-                        continue
-                    }
+    /**
+     * "/storage/emulated/0/Music/Album/x.mp3" → "Music/Album/" e "/storage/ABCD-1234/Music/x.mp3"
+     * (cartão SD) → "Music/" — o equivalente ao RELATIVE_PATH para Android 8 e 9.
+     */
+    private fun relativaDoCaminho(caminho: String): String {
+        val partes = caminho.trim('/').split('/')
+        val raiz = when {
+            partes.getOrNull(0) == "storage" && partes.getOrNull(1) == "emulated" -> 3
+            partes.getOrNull(0) == "storage" -> 2
+            partes.getOrNull(0) == "sdcard" -> 1
+            else -> 0
+        }
+        return partes.drop(raiz).dropLast(1).joinToString("/", postfix = "/")
+    }
 
-                    val uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
-                    val musica = construirMusica(id.toString(), uri, caminho, nomeArquivo, duracaoMediaStore)
-                    resultado.add(musica)
-                } catch (e: Exception) {
-                    Log.w(TAG, "Falha ao processar faixa, pulando: ${e.message}")
+    private fun construir(l: Linha): Musica {
+        val tags = if (l.caminho.endsWith(".mp3", ignoreCase = true)) Id3Parser.lerTags(l.caminho) else null
+        val tipoLetra = when {
+            tags?.sylt != null -> TipoLetra.SINCRONIZADA
+            tags?.uslt != null && Lrc.ehLrc(tags.uslt) -> TipoLetra.SINCRONIZADA
+            tags?.uslt != null -> TipoLetra.SIMPLES
+            else -> TipoLetra.AUSENTE
+        }
+        val artista = tags?.artista ?: l.artista ?: "Artista desconhecido"
+        // MediaStore guarda a faixa como disco*1000 + faixa.
+        val faixaMs = l.faixa.takeIf { it > 0 }?.rem(1000)?.takeIf { it > 0 }
+        return Musica(
+            id = l.id.toString(),
+            uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, l.id),
+            caminho = l.caminho,
+            titulo = tags?.titulo ?: l.titulo?.takeIf { it.isNotBlank() } ?: l.nome.substringBeforeLast('.'),
+            artista = artista,
+            album = tags?.album ?: l.album.orEmpty(),
+            artistaAlbum = tags?.artistaAlbum ?: l.artistaAlbum.orEmpty(),
+            ano = tags?.ano ?: l.ano.takeIf { it > 0 },
+            faixa = tags?.faixa ?: faixaMs,
+            disco = tags?.disco ?: l.faixa.takeIf { it >= 1000 }?.div(1000),
+            duracaoMs = l.duracao,
+            adicionadaEmSeg = l.adicionada,
+            modificadoSeg = l.modificada,
+            tamanhoBytes = l.tamanho,
+            // Fora do MP3 não sabemos sem abrir o arquivo; o CapaRepository tenta e lembra o resultado.
+            temCapa = tags?.temCapa ?: true,
+            tipoLetra = tipoLetra,
+        )
+    }
+
+    /** Letras baixadas/importadas pelo usuário contam como sincronizadas/simples na biblioteca. */
+    private fun comLetraSalva(m: Musica): Musica {
+        val salva = File(pastaLetrasSalvas, "${m.id}.lrc")
+        if (!salva.exists()) return m
+        val tipo = runCatching { if (Lrc.ehLrc(salva.readText())) TipoLetra.SINCRONIZADA else TipoLetra.SIMPLES }.getOrNull()
+        return if (tipo != null && tipo != m.tipoLetra) m.copy(tipoLetra = tipo) else m
+    }
+
+    // ---- Índice em disco ----
+
+    private fun lerIndice(): Map<String, Musica> = try {
+        if (!arquivoIndice.exists()) {
+            emptyMap()
+        } else {
+            val raiz = JSONObject(arquivoIndice.readText())
+            if (raiz.optInt("versao") != VERSAO_INDICE) {
+                emptyMap()
+            } else {
+                val lista = raiz.getJSONArray("musicas")
+                (0 until lista.length()).associate { i ->
+                    val o = lista.getJSONObject(i)
+                    val id = o.getString("id")
+                    o.getString("caminho") to Musica(
+                        id = id,
+                        uri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id.toLong()),
+                        caminho = o.getString("caminho"),
+                        titulo = o.getString("titulo"),
+                        artista = o.getString("artista"),
+                        album = o.getString("album"),
+                        artistaAlbum = o.getString("artistaAlbum"),
+                        ano = o.optInt("ano").takeIf { it > 0 },
+                        faixa = o.optInt("faixa").takeIf { it > 0 },
+                        disco = o.optInt("disco").takeIf { it > 0 },
+                        duracaoMs = o.getLong("duracao"),
+                        adicionadaEmSeg = o.getLong("adicionada"),
+                        modificadoSeg = o.getLong("modificada"),
+                        tamanhoBytes = o.getLong("tamanho"),
+                        temCapa = o.getBoolean("capa"),
+                        tipoLetra = TipoLetra.valueOf(o.getString("letra")),
+                    )
                 }
             }
         }
-
-        resultado
+    } catch (e: Exception) {
+        Log.w(TAG, "Índice da biblioteca ilegível, relendo tudo: ${e.message}")
+        emptyMap()
     }
 
-    private fun construirMusica(
-        id: String,
-        uri: android.net.Uri,
-        caminho: String,
-        nomeArquivo: String,
-        duracaoMediaStore: Long
-    ): Musica {
-        val tags = Id3Parser.parse(caminho)
-
-        val capaBitmap: Bitmap? = tags.capa?.let { apic ->
-            try {
-                decodificarCapaReduzida(apic.dados, TAMANHO_MAXIMO_CAPA_PX)
-            } catch (e: Exception) {
-                Log.w(TAG, "Falha ao decodificar capa de $nomeArquivo: ${e.message}")
-                null
+    private fun salvarIndice(musicas: List<Musica>) {
+        runCatching {
+            val lista = JSONArray()
+            musicas.forEach { m ->
+                lista.put(
+                    JSONObject()
+                        .put("id", m.id).put("caminho", m.caminho).put("titulo", m.titulo)
+                        .put("artista", m.artista).put("album", m.album).put("artistaAlbum", m.artistaAlbum)
+                        .put("ano", m.ano ?: 0).put("faixa", m.faixa ?: 0).put("disco", m.disco ?: 0)
+                        .put("duracao", m.duracaoMs).put("adicionada", m.adicionadaEmSeg)
+                        .put("modificada", m.modificadoSeg).put("tamanho", m.tamanhoBytes)
+                        .put("capa", m.temCapa).put("letra", m.tipoLetra.name),
+                )
             }
+            val temporario = File(arquivoIndice.parentFile, "biblioteca.json.tmp")
+            temporario.writeText(JSONObject().put("versao", VERSAO_INDICE).put("musicas", lista).toString())
+            temporario.renameTo(arquivoIndice)
         }
-
-        val duracaoMs = if (duracaoMediaStore > 0) {
-            duracaoMediaStore
-        } else {
-            obterDuracaoViaRetriever(caminho)
-        }
-
-        val (letra, tipoLetra) = when {
-            tags.sylt != null && tags.sylt.linhas.isNotEmpty() -> {
-                tags.sylt.linhas.map { LinhaLetra(it.texto, it.tempoMs) } to TipoLetra.SINCRONIZADA
-            }
-            tags.uslt != null && tags.uslt.texto.isNotBlank() -> {
-                tags.uslt.texto.lines()
-                    .filter { it.isNotBlank() }
-                    .map { LinhaLetra(it.trim(), null) } to TipoLetra.SIMPLES
-            }
-            else -> emptyList<LinhaLetra>() to TipoLetra.AUSENTE
-        }
-
-        return Musica(
-            id = id,
-            uri = uri,
-            caminhoArquivo = caminho,
-            titulo = tags.titulo?.takeIf { it.isNotBlank() } ?: nomeArquivo.substringBeforeLast('.'),
-            artista = tags.artista?.takeIf { it.isNotBlank() } ?: "Artista desconhecido",
-            capa = capaBitmap,
-            duracaoMs = duracaoMs,
-            letra = letra,
-            tipoLetra = tipoLetra
-        )
     }
 
-    private fun obterDuracaoViaRetriever(caminho: String): Long {
-        return try {
-            val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(caminho)
-            val duracao = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-            retriever.release()
-            duracao?.toLongOrNull() ?: 0L
-        } catch (e: Exception) {
-            0L
-        }
+    companion object {
+        private const val TAG = "MusicaRepository"
+        private const val VERSAO_INDICE = 2
+        const val PASTA_PADRAO = "Music"
     }
 }
