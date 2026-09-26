@@ -1,14 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-  Marca SongV: um V caligráfico que também é uma colcheia. O traço esquerdo é largo como uma
-  pena; o direito vira a haste da nota, com bandeirola, e a cabeça da nota fica na última
-  linha do pentagrama (desenhado no fundo).
--->
+<!-- Splash e tela de permissão: a marca completa dentro de um círculo. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <group>
+        <clip-path android:pathData="M54,18 a36,36 0 1 1 0,72 a36,36 0 1 1 0,-72 Z" />
+        <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="radial"
+                android:centerX="32"
+                android:centerY="27"
+                android:gradientRadius="100">
+                <item android:offset="0" android:color="#FFFF8233" />
+                <item android:offset="0.55" android:color="#FFFF6B1A" />
+                <item android:offset="1" android:color="#FFE8550C" />
+            </gradient>
+        </aapt:attr>
+        </path>
+        <path
+            android:fillColor="#8CFFF4EB"
+            android:pathData="M0,36.40 H108 V37.60 H0 Z M0,44.80 H108 V46.00 H0 Z M0,53.20 H108 V54.40 H0 Z M0,61.60 H108 V62.80 H0 Z M0,70.00 H108 V71.20 H0 Z" />
     <!-- Contorno na cor do fundo: interrompe as linhas da pauta ao redor do V. -->
     <path
         android:strokeColor="#FFFF6E1E"
@@ -18,4 +33,5 @@
     <path
         android:fillColor="#FF1C130E"
         android:pathData="M39.62,73.98 A8.30,5.70 -24 1 0 54.78,67.22 A8.30,5.70 -24 1 0 39.62,73.98 Z M52.22,67.19 L55.34,68.26 L67.83,32.00 L64.34,32.00 Z M28.80,32.00 L37.20,32.00 L43.90,68.00 L47.30,66.80 Z M64.34,32.00 L67.83,32.00 C69.03,36.20 77.03,39.40 76.83,47.20 C76.73,50.60 75.43,53.40 73.83,55.20 C74.83,48.60 73.03,44.40 64.21,42.50 Z" />
+    </group>
 </vector>
