@@ -3,309 +3,357 @@ package com.songv.app.ui
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.compose.animation.*
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.Surface
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import com.songv.app.SongVApp
 import com.songv.app.player.MusicPlaybackService
 import com.songv.app.player.PlayerViewModel
+import com.songv.app.ui.components.EscolherPlaylistSheet
+import com.songv.app.ui.components.LocalBiblioteca
+import com.songv.app.ui.components.LocalCapas
+import com.songv.app.ui.components.MenuMusicaSheet
+import com.songv.app.ui.components.MiniPlayer
+import com.songv.app.ui.screens.AlbumScreen
 import com.songv.app.ui.screens.ArtistaScreen
 import com.songv.app.ui.screens.BibliotecaScreen
+import com.songv.app.ui.screens.BuscaScreen
 import com.songv.app.ui.screens.ConfiguracoesScreen
-import com.songv.app.ui.screens.CriarPlaylistDialog
 import com.songv.app.ui.screens.FilaScreen
+import com.songv.app.ui.screens.InicioScreen
 import com.songv.app.ui.screens.PermissaoScreen
 import com.songv.app.ui.screens.PlayerScreen
 import com.songv.app.ui.screens.PlaylistScreen
-import com.songv.app.ui.theme.RoxoDarkPrimaryPublico
+import com.songv.app.ui.theme.LocalCoresSongV
 import com.songv.app.ui.theme.SongVTheme
-
-/**
- * Cada tela sobreposta à Biblioteca (que fica sempre no fundo da pilha, implícita). Usamos uma
- * pilha real ([List] como backstack) em vez de uma única variável, para que "voltar" sempre volte
- * pra tela anterior de fato — por exemplo Playlist → Player → Fila, voltar da Fila cai no Player,
- * e voltar do Player cai de volta na Playlist, não direto na Biblioteca.
- */
-private sealed class Tela {
-    data object Player : Tela()
-    data object Fila : Tela()
-    data object Configuracoes : Tela()
-    data class Artista(val nome: String) : Tela()
-    data class PlaylistDetalhe(val id: String) : Tela()
-}
+import com.songv.app.ui.theme.corDoDestaque
 
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: PlayerViewModel by viewModels()
-
-    private fun permissaoNecessaria(): String {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_AUDIO
-        } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
-        }
-    }
-
-    private fun temPermissao(): Boolean {
-        return ContextCompat.checkSelfPermission(this, permissaoNecessaria()) == PackageManager.PERMISSION_GRANTED
-    }
-
-    /**
-     * Inicia o [MusicPlaybackService] a partir da Activity, no [onCreate] — ponto do ciclo de
-     * vida em que o app está garantidamente em primeiro plano. Iniciar o foreground service a
-     * partir daqui (em vez de reagir a "a música começou a tocar" em algum listener de background)
-     * evita o [android.app.ForegroundServiceStartNotAllowedException] que o Android 12+ pode
-     * lançar quando um app tenta subir um foreground service fora do primeiro plano — exceção que,
-     * se não capturada, derruba o processo inteiro sem aviso.
-     */
-    private fun iniciarServicoDeNotificacao() {
-        try {
-            val intent = Intent(this, MusicPlaybackService::class.java)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(intent)
-            } else {
-                startService(intent)
-            }
-        } catch (e: Exception) {
-            // A reprodução em si não depende do serviço: sem ele, só não teremos notificação.
-        }
-    }
+    private val vm: PlayerViewModel by viewModels()
+    private val pedidoAbrirPlayer = mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Precisa ser chamado antes de super.onCreate. A splash nativa fica visível até
-        // preferenciasCarregadas virar true, evitando qualquer flash do tema padrão antes do
-        // tema salvo pelo usuário ser aplicado.
-        val splashScreen = installSplashScreen()
-        splashScreen.setKeepOnScreenCondition { !viewModel.estado.value.preferenciasCarregadas }
-
+        val splash = installSplashScreen()
         super.onCreate(savedInstanceState)
-
-        // Ativa modo edge-to-edge: conteudo cobre toda a tela incluindo status/nav bars
+        // A splash só sai quando o tema salvo carregou: nada de piscar o tema padrão.
+        splash.setKeepOnScreenCondition { !vm.preferencias.value.carregadas }
         enableEdgeToEdge()
 
-        iniciarServicoDeNotificacao()
+        // Serviço comum (não foreground): o Media3 promove a foreground sozinho quando começa a tocar.
+        runCatching { startService(Intent(this, MusicPlaybackService::class.java)) }
 
-        setContent {
-            var permissaoConcedida by remember { mutableStateOf(temPermissao()) }
+        if (intent?.action == ACAO_ABRIR_PLAYER) pedidoAbrirPlayer.value = true
+        setContent { App(vm, pedidoAbrirPlayer) }
+    }
 
-            val launcher = rememberLauncherForActivityResult(
-                ActivityResultContracts.RequestPermission()
-            ) { concedida ->
-                permissaoConcedida = concedida
-                if (concedida) viewModel.carregarBiblioteca()
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.action == ACAO_ABRIR_PLAYER) pedidoAbrirPlayer.value = true
+    }
+
+    override fun onStop() {
+        super.onStop()
+        vm.salvarSessao()
+    }
+
+    companion object {
+        const val ACAO_ABRIR_PLAYER = "com.songv.app.ABRIR_PLAYER"
+    }
+}
+
+private fun permissaoDeAudio() =
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
+
+@Composable
+private fun App(vm: PlayerViewModel, pedidoAbrirPlayer: MutableState<Boolean>) {
+    val prefs by vm.preferencias.collectAsState()
+    val nav = rememberSaveable(saver = Navegador.Saver) { Navegador() }
+    val contexto = LocalContext.current
+    val activity = contexto as ComponentActivity
+
+    LaunchedEffect(pedidoAbrirPlayer.value) {
+        if (pedidoAbrirPlayer.value) {
+            nav.filaAberta = false
+            nav.playerAberto = true
+            pedidoAbrirPlayer.value = false
+        }
+    }
+
+    SongVTheme(modo = prefs.modoTema, destaque = corDoDestaque(prefs.destaque, prefs.corPersonalizada)) {
+        // Ícones da barra de status claros sobre o player (sempre escuro) e conforme o tema no resto.
+        val escuro = LocalCoresSongV.current.escuro || nav.playerAberto || nav.filaAberta
+        LaunchedEffect(escuro) {
+            val estilo = if (escuro) {
+                SystemBarStyle.dark(android.graphics.Color.TRANSPARENT)
+            } else {
+                SystemBarStyle.light(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT)
             }
+            activity.enableEdgeToEdge(statusBarStyle = estilo, navigationBarStyle = estilo)
+        }
 
-            // Notificação de mídia (capa, título, play/pause) exige permissão explícita a partir
-            // do Android 13. Sem ela o app funciona normalmente, só não mostra a notificação.
-            val launcherNotificacao = rememberLauncherForActivityResult(
-                ActivityResultContracts.RequestPermission()
-            ) { /* concedida ou não, a reprodução continua funcionando normalmente */ }
+        var concedida by remember { mutableStateOf(temPermissao(contexto)) }
+        var negadaDeVez by rememberSaveable { mutableStateOf(false) }
+        val pedirNotificacao = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+        val pedirAudio = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
+            concedida = ok
+            negadaDeVez = !ok && !activity.shouldShowRequestPermissionRationale(permissaoDeAudio())
+        }
 
-            LaunchedEffect(permissaoConcedida) {
-                if (permissaoConcedida) {
-                    viewModel.carregarBiblioteca()
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        val jaTemNotificacao = ContextCompat.checkSelfPermission(
-                            this@MainActivity,
-                            Manifest.permission.POST_NOTIFICATIONS
-                        ) == PackageManager.PERMISSION_GRANTED
-                        if (!jaTemNotificacao) {
-                            launcherNotificacao.launch(Manifest.permission.POST_NOTIFICATIONS)
-                        }
-                    }
-                }
+        // Voltou das configurações do sistema? Confere de novo.
+        val dono = LocalLifecycleOwner.current
+        DisposableEffect(dono) {
+            val observador = LifecycleEventObserver { _, evento ->
+                if (evento == Lifecycle.Event.ON_RESUME) concedida = temPermissao(contexto)
             }
+            dono.lifecycle.addObserver(observador)
+            onDispose { dono.lifecycle.removeObserver(observador) }
+        }
 
-            val estado by viewModel.estado.collectAsState()
-
-            // Pilha de navegação: a Biblioteca é sempre a base implícita (índice -1, por assim
-            // dizer). Cada push empilha uma tela nova; "voltar" sempre faz pop, revelando
-            // exatamente a tela anterior — nunca pula direto pra Biblioteca.
-            var pilha by remember { mutableStateOf<List<Tela>>(emptyList()) }
-            val telaAtual = pilha.lastOrNull()
-
-            fun empilhar(tela: Tela) {
-                pilha = pilha + tela
+        LaunchedEffect(concedida) {
+            if (!concedida) return@LaunchedEffect
+            vm.carregarBiblioteca() // não faz nada se já carregou (girar a tela não recarrega)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(contexto, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
+                pedirNotificacao.launch(Manifest.permission.POST_NOTIFICATIONS)
             }
-            fun voltar() {
-                if (pilha.isNotEmpty()) pilha = pilha.dropLast(1)
-            }
+        }
 
-            var mostrarCriarPlaylist by remember { mutableStateOf(false) }
-
-            // Gesto/botão físico de voltar do Android segue a mesma pilha: fecha diálogos abertos
-            // primeiro, senão faz pop da tela sobreposta atual, senão comportamento padrão do
-            // sistema (minimizar o app) quando já está na Biblioteca.
-            BackHandler(enabled = mostrarCriarPlaylist) { mostrarCriarPlaylist = false }
-            BackHandler(enabled = !mostrarCriarPlaylist && pilha.isNotEmpty()) { voltar() }
-
-            val corPersonalizada = estado.corPersonalizadaArgb?.let { Color(it) } ?: RoxoDarkPrimaryPublico
-
-            SongVTheme(tema = estado.tema, corPersonalizada = corPersonalizada, modoLuminosidade = estado.modoLuminosidade) {
-                if (!permissaoConcedida) {
-                    PermissaoScreen(onSolicitarPermissao = { launcher.launch(permissaoNecessaria()) })
-                } else {
-                    BibliotecaScreen(
-                        estado = estado,
-                        onMusicaClick = { indice ->
-                            viewModel.tocarMusica(indice)
-                            empilhar(Tela.Player)
-                        },
-                        onAtualizarClick = { viewModel.carregarBiblioteca() },
-                        onConfiguracoesClick = { empilhar(Tela.Configuracoes) },
-                        onFaixaAtualClick = { empilhar(Tela.Player) },
-                        onFavoritoClick = { id -> viewModel.alternarFavorito(id) },
-                        onBuscaChange = { termo -> viewModel.definirTermoBusca(termo) },
-                        onArtistaClick = { nomeArtista -> empilhar(Tela.Artista(nomeArtista)) },
-                        onPlaylistClick = { idPlaylist -> empilhar(Tela.PlaylistDetalhe(idPlaylist)) },
-                        onCriarPlaylistClick = { mostrarCriarPlaylist = true }
-                    )
-
-                    AnimatedVisibility(
-                        visible = telaAtual is Tela.Player,
-                        enter = slideInVertically(
-                            initialOffsetY = { it },
-                            animationSpec = tween(400)
-                        ),
-                        exit = slideOutVertically(
-                            targetOffsetY = { it },
-                            animationSpec = tween(300)
+        // Surface (e não Box) para o texto herdar onBackground — fora dele a cor padrão é preta.
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            if (!concedida) {
+                PermissaoScreen(
+                    negadaDeVez = negadaDeVez,
+                    onPermitir = { pedirAudio.launch(permissaoDeAudio()) },
+                    onAbrirConfiguracoes = {
+                        contexto.startActivity(
+                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", contexto.packageName, null)),
                         )
-                    ) {
-                        PlayerScreen(
-                            estado = estado,
-                            onVoltar = { voltar() },
-                            onPlayPause = viewModel::alternarPlayPause,
-                            onProxima = viewModel::proxima,
-                            onAnterior = viewModel::anterior,
-                            onSeek = viewModel::buscarPosicao,
-                            onFavoritoClick = { id -> viewModel.alternarFavorito(id) },
-                            onEmbaralharClick = viewModel::alternarEmbaralhado,
-                            onRepeticaoClick = viewModel::alternarModoRepeticao,
-                            onFilaClick = { empilhar(Tela.Fila) },
-                            onTraduzirLetra = { musica -> viewModel.traduzirLetraAtual(musica) },
-                            onAlternarTraducao = { viewModel.alternarMostrarTraducao() },
-                            onEscolherIdiomaTraducao = { codigo -> viewModel.definirIdiomaTraducao(codigo) }
-                        )
-                    }
-
-                    AnimatedVisibility(
-                        visible = telaAtual is Tela.Fila,
-                        enter = slideInVertically(
-                            initialOffsetY = { it },
-                            animationSpec = tween(400)
-                        ),
-                        exit = slideOutVertically(
-                            targetOffsetY = { it },
-                            animationSpec = tween(300)
-                        )
-                    ) {
-                        FilaScreen(
-                            faixaAtual = estado.faixaAtual,
-                            proximasNaFila = estado.proximasNaFila,
-                            indiceFilaAtual = estado.indiceFilaAtual,
-                            onVoltar = { voltar() },
-                            onTocarIndice = { indice -> viewModel.tocarNaFilaAtual(indice) },
-                            onMover = { de, para -> viewModel.moverNaFila(de, para) }
-                        )
-                    }
-
-                    val telaArtista = telaAtual as? Tela.Artista
-                    AnimatedVisibility(
-                        visible = telaArtista != null,
-                        enter = slideInVertically(initialOffsetY = { it }, animationSpec = tween(400)),
-                        exit = slideOutVertically(targetOffsetY = { it }, animationSpec = tween(300))
-                    ) {
-                        if (telaArtista != null) {
-                            val musicasDoArtista = estado.musicasPorArtista.firstOrNull { it.first == telaArtista.nome }?.second ?: emptyList()
-                            ArtistaScreen(
-                                nomeArtista = telaArtista.nome,
-                                musicas = musicasDoArtista,
-                                onVoltar = { voltar() },
-                                onTocarTudo = {
-                                    viewModel.tocarLista(musicasDoArtista, 0)
-                                    empilhar(Tela.Player)
-                                },
-                                onMusicaClick = { indiceLocal ->
-                                    viewModel.tocarLista(musicasDoArtista, indiceLocal)
-                                    empilhar(Tela.Player)
-                                }
-                            )
-                        }
-                    }
-
-                    val telaPlaylist = telaAtual as? Tela.PlaylistDetalhe
-                    AnimatedVisibility(
-                        visible = telaPlaylist != null,
-                        enter = slideInVertically(initialOffsetY = { it }, animationSpec = tween(400)),
-                        exit = slideOutVertically(targetOffsetY = { it }, animationSpec = tween(300))
-                    ) {
-                        val playlist = telaPlaylist?.let { tp -> estado.playlists.firstOrNull { it.id == tp.id } }
-                        if (playlist != null) {
-                            val musicasDaPlaylist = estado.musicasDaPlaylist(playlist)
-                            PlaylistScreen(
-                                playlist = playlist,
-                                musicas = musicasDaPlaylist,
-                                todasAsMusicas = estado.biblioteca,
-                                onVoltar = { voltar() },
-                                onTocarTudo = {
-                                    viewModel.tocarLista(musicasDaPlaylist, 0)
-                                    empilhar(Tela.Player)
-                                },
-                                onMusicaClick = { indiceLocal ->
-                                    viewModel.tocarLista(musicasDaPlaylist, indiceLocal)
-                                    empilhar(Tela.Player)
-                                },
-                                onRemoverMusica = { idMusica -> viewModel.removerMusicaDaPlaylist(playlist.id, idMusica) },
-                                onAdicionarMusica = { idMusica -> viewModel.adicionarMusicaNaPlaylist(playlist.id, idMusica) },
-                                onRenomear = { novoNome -> viewModel.renomearPlaylist(playlist.id, novoNome) },
-                                onExcluir = {
-                                    viewModel.excluirPlaylist(playlist.id)
-                                    voltar()
-                                }
-                            )
-                        }
-                    }
-
-                    AnimatedVisibility(
-                        visible = telaAtual is Tela.Configuracoes,
-                        enter = slideInVertically(initialOffsetY = { it }, animationSpec = tween(400)),
-                        exit = slideOutVertically(targetOffsetY = { it }, animationSpec = tween(300))
-                    ) {
-                        ConfiguracoesScreen(
-                            temaAtual = estado.tema,
-                            corPersonalizadaAtual = corPersonalizada,
-                            modoLuminosidade = estado.modoLuminosidade,
-                            onVoltar = { voltar() },
-                            onTemaEscolhido = { tema -> viewModel.definirTema(tema) },
-                            onCorPersonalizadaEscolhida = { cor -> viewModel.definirCorPersonalizada(cor.toArgb()) },
-                            onAlternarLuminosidade = { viewModel.alternarLuminosidade() }
-                        )
-                    }
-
-                    if (mostrarCriarPlaylist) {
-                        CriarPlaylistDialog(
-                            onConfirmar = { nome -> viewModel.criarPlaylist(nome) },
-                            onFechar = { mostrarCriarPlaylist = false }
-                        )
-                    }
+                    },
+                )
+            } else {
+                val bib by vm.biblioteca.collectAsState()
+                CompositionLocalProvider(
+                    LocalCapas provides (contexto.applicationContext as SongVApp).capas,
+                    LocalBiblioteca provides bib.porId,
+                ) {
+                    Casca(vm, nav)
                 }
             }
         }
+    }
+}
+
+private fun temPermissao(contexto: android.content.Context) =
+    ContextCompat.checkSelfPermission(contexto, permissaoDeAudio()) == PackageManager.PERMISSION_GRANTED
+
+@Composable
+private fun Casca(vm: PlayerViewModel, nav: Navegador) {
+    val rep by vm.reproducao.collectAsState()
+    val prefs by vm.preferencias.collectAsState()
+    val bib by vm.biblioteca.collectAsState()
+    val avisos = remember { SnackbarHostState() }
+    val estados = rememberSaveableStateHolder()
+    var margemInferior by remember { mutableStateOf(PaddingValues(0.dp)) }
+
+    LaunchedEffect(Unit) {
+        vm.mensagens.collect { m ->
+            val r = avisos.showSnackbar(m.texto, m.acao, duration = if (m.acao != null) SnackbarDuration.Long else SnackbarDuration.Short)
+            if (r == SnackbarResult.ActionPerformed) m.aoAgir?.invoke()
+        }
+    }
+
+    BackHandler(
+        enabled = nav.filaAberta || nav.playerAberto || nav.pilha.isNotEmpty() || nav.aba != Aba.INICIO,
+    ) { nav.voltar() }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        contentWindowInsets = WindowInsets(0),
+        bottomBar = {
+            Column {
+                val atual = rep.atual
+                AnimatedVisibility(atual != null, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+                    if (atual != null) {
+                        MiniPlayer(
+                            musica = atual,
+                            tocando = rep.tocando,
+                            progresso = vm.progresso,
+                            onAbrir = { nav.playerAberto = true },
+                            onPlayPause = vm::alternarPlayPause,
+                            onProxima = vm::proxima,
+                            onAnterior = vm::anterior,
+                            modifier = Modifier.padding(bottom = 6.dp),
+                        )
+                    }
+                }
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow, tonalElevation = 0.dp) {
+                    Aba.entries.forEach { aba ->
+                        val ativa = nav.aba == aba
+                        NavigationBarItem(
+                            selected = ativa,
+                            onClick = { nav.trocarAba(aba) },
+                            icon = { Icon(if (ativa) aba.iconeAtivo else aba.icone, contentDescription = null) },
+                            label = { Text(aba.rotulo) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                                indicatorColor = MaterialTheme.colorScheme.secondaryContainer,
+                                selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                            ),
+                        )
+                    }
+                }
+            }
+        },
+    ) { padding ->
+        SideEffect { margemInferior = padding }
+        val alvo: Any = nav.rotaAtual ?: nav.aba
+        AnimatedContent(
+            targetState = alvo,
+            transitionSpec = {
+                if (initialState is Aba && targetState is Aba) {
+                    fadeIn(tween(220, delayMillis = 60)) togetherWith fadeOut(tween(120))
+                } else {
+                    val frente = nav.avancou
+                    (slideInHorizontally(tween(260)) { if (frente) it / 5 else -it / 5 } + fadeIn(tween(220))) togetherWith
+                        (slideOutHorizontally(tween(220)) { if (frente) -it / 8 else it / 8 } + fadeOut(tween(160)))
+                }
+            },
+            label = "navegacao",
+        ) { destino ->
+            estados.SaveableStateProvider(destino.toString()) {
+                when (destino) {
+                    Aba.INICIO -> InicioScreen(vm, nav, padding)
+                    Aba.BUSCAR -> BuscaScreen(vm, nav, padding)
+                    Aba.BIBLIOTECA -> BibliotecaScreen(vm, nav, padding)
+                    is Rota.Album -> AlbumScreen(vm, nav, destino.chave, padding)
+                    is Rota.Artista -> ArtistaScreen(vm, nav, destino.nome, padding)
+                    is Rota.Playlist -> PlaylistScreen(vm, nav, destino.id, padding)
+                    Rota.Favoritas -> PlaylistScreen(vm, nav, null, padding)
+                    Rota.Configuracoes -> ConfiguracoesScreen(vm, nav, padding)
+                }
+            }
+        }
+    }
+
+    AnimatedVisibility(
+        visible = nav.playerAberto,
+        enter = slideInVertically(tween(340)) { it } + fadeIn(tween(200)),
+        exit = slideOutVertically(tween(280)) { it } + fadeOut(tween(240)),
+    ) {
+        PlayerScreen(vm, nav)
+    }
+    AnimatedVisibility(
+        visible = nav.filaAberta,
+        enter = slideInVertically(tween(300)) { it },
+        exit = slideOutVertically(tween(250)) { it },
+    ) {
+        FilaScreen(vm, nav)
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        SnackbarHost(
+            avisos,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .then(if (nav.playerAberto || nav.filaAberta) Modifier.navigationBarsPadding().padding(bottom = 96.dp) else Modifier.padding(margemInferior)),
+        ) { dados ->
+            Snackbar(
+                dados,
+                shape = MaterialTheme.shapes.medium,
+                containerColor = MaterialTheme.colorScheme.inverseSurface,
+                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                actionColor = MaterialTheme.colorScheme.inversePrimary,
+            )
+        }
+    }
+
+    nav.menuMusica?.let { m ->
+        val album = bib.albuns.firstOrNull { a -> a.musicas.any { it.id == m.id } }
+        MenuMusicaSheet(
+            musica = m,
+            favoritada = m.id in prefs.favoritos,
+            onFechar = { nav.menuMusica = null },
+            onTocarAseguir = { vm.tocarAseguir(listOf(m)) },
+            onAdicionarFila = { vm.adicionarAFila(listOf(m)) },
+            onAdicionarPlaylist = { nav.paraPlaylist = listOf(m) },
+            onFavoritar = { vm.alternarFavorito(m.id) },
+            onIrAlbum = album?.let { a -> { nav.abrir(Rota.Album(a.chave)) } },
+            onIrArtista = { nav.abrir(Rota.Artista(m.artistas.first())) },
+        )
+    }
+    nav.paraPlaylist?.let { musicas ->
+        EscolherPlaylistSheet(
+            musicas = musicas,
+            playlists = prefs.playlists,
+            onFechar = { nav.paraPlaylist = null },
+            onEscolher = { p -> vm.adicionarNaPlaylist(p.id, musicas.map { it.id }) },
+            onCriar = { nome -> vm.criarPlaylist(nome, musicas.map { it.id }) },
+        )
     }
 }

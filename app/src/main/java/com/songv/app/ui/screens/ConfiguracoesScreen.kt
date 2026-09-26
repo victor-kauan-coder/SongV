@@ -1,216 +1,444 @@
 package com.songv.app.ui.screens
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.Folder
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import com.songv.app.ui.theme.ModoLuminosidade
-import com.songv.app.ui.theme.TemaApp
+import com.songv.app.BuildConfig
+import com.songv.app.data.Destaque
+import com.songv.app.data.ModoTema
+import com.songv.app.letra.IDIOMAS_TRADUCAO
+import com.songv.app.letra.nomeIdioma
+import com.songv.app.player.PlayerViewModel
+import com.songv.app.ui.Navegador
+import com.songv.app.ui.theme.LocalCoresSongV
+import com.songv.app.ui.theme.corDoDestaque
+import kotlin.math.roundToInt
 
-/**
- * Tela de Configurações: aparência (paleta de cores, claro/escuro) e outras preferências do app.
- * Ficam aqui, fora da tela inicial, pra deixar a Home limpa e focada em navegar pela música.
- */
-@OptIn(ExperimentalMaterial3Api::class)
+private const val PERFIL_GITHUB = "https://github.com/victor-kauan-coder"
+private const val REPOSITORIO = "https://github.com/victor-kauan-coder/SongV"
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ConfiguracoesScreen(
-    temaAtual: TemaApp,
-    corPersonalizadaAtual: Color,
-    modoLuminosidade: ModoLuminosidade,
-    onVoltar: () -> Unit,
-    onTemaEscolhido: (TemaApp) -> Unit,
-    onCorPersonalizadaEscolhida: (Color) -> Unit,
-    onAlternarLuminosidade: () -> Unit
-) {
-    var secaoAbertaAparencia by remember { mutableStateOf(true) }
-    var mostrarSeletorCorLivre by remember { mutableStateOf(false) }
+fun ConfiguracoesScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: PaddingValues) {
+    val prefs by vm.preferencias.collectAsState()
+    val bib by vm.biblioteca.collectAsState()
+    val contexto = LocalContext.current
+    val pastas by produceState(emptyList<Pair<String, Int>>(), bib.musicas.size) { value = vm.pastasDisponiveis() }
+    var seletorCor by rememberSaveable { mutableStateOf(false) }
+    val cores = LocalCoresSongV.current
+    fun abrir(url: String) = runCatching { contexto.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Configurações", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onVoltar) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Voltar")
-                    }
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = contentPadding) {
+        item {
+            Row(Modifier.statusBarsPadding().padding(horizontal = 4.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { nav.voltar() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Voltar") }
+                Text("Configurações", style = MaterialTheme.typography.headlineSmall)
+            }
+        }
+
+        // ---- Aparência ----
+        item { Secao("Aparência") }
+        item {
+            Text("Tema", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 20.dp))
+            Row(Modifier.padding(horizontal = 20.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ModoTema.entries.forEach { m ->
+                    FilterChip(
+                        selected = prefs.modoTema == m,
+                        onClick = { vm.definirModoTema(m) },
+                        label = { Text(m.rotulo) },
+                        shape = CircleShape,
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = cores.sinal, selectedLabelColor = cores.noSinal),
+                    )
                 }
+            }
+        }
+        item {
+            Text("Cor de destaque", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp))
+            Text(
+                "Usada no botão de play, na faixa tocando e nos modos ligados.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
+            FlowRow(
+                Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Destaque.entries.forEach { d ->
+                    val cor = corDoDestaque(d, prefs.corPersonalizada)
+                    AmostraCor(
+                        cor = cor,
+                        rotulo = d.rotulo,
+                        selecionada = prefs.destaque == d,
+                        personalizada = d == Destaque.PERSONALIZADO,
+                        onClick = { if (d == Destaque.PERSONALIZADO) seletorCor = true else vm.definirDestaque(d) },
+                    )
+                }
+            }
+        }
+        item {
+            LinhaChave(
+                "Cores da capa no player",
+                "O fundo do player acompanha a capa de cada faixa",
+                prefs.coresDaCapa,
+                vm::definirCoresDaCapa,
             )
         }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(bottom = 32.dp)
-        ) {
-            item {
-                CabecalhoSecao(
-                    titulo = "Aparência",
-                    subtitulo = "Cor do app e modo claro/escuro",
-                    icone = Icons.Filled.Palette,
-                    expandida = secaoAbertaAparencia,
-                    onClick = { secaoAbertaAparencia = !secaoAbertaAparencia }
-                )
-            }
 
-            item {
-                AnimatedVisibility(visible = secaoAbertaAparencia, enter = expandVertically(), exit = shrinkVertically()) {
-                    Column {
-                        ItemLuminosidade(
-                            modoLuminosidade = modoLuminosidade,
-                            onClick = onAlternarLuminosidade
+        // ---- Biblioteca ----
+        item { Secao("Biblioteca") }
+        item {
+            Text("Pasta das músicas", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 20.dp))
+            Text(
+                "Onde o SongV procura áudio. O agente salva em Music.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
+            Spacer(Modifier.height(4.dp))
+            OpcaoPasta("Todas as pastas", pastas.sumOf { it.second }, prefs.pastaBiblioteca.isBlank()) { vm.definirPasta("") }
+            val lista = (pastas.map { it.first } + prefs.pastaBiblioteca).filter { it.isNotBlank() }.distinct()
+            lista.forEach { p ->
+                OpcaoPasta(p, pastas.firstOrNull { it.first == p }?.second ?: 0, prefs.pastaBiblioteca.equals(p, ignoreCase = true)) { vm.definirPasta(p) }
+            }
+        }
+        item {
+            LinhaChave(
+                "Ignorar áudios curtos",
+                "Esconde arquivos com menos de 30 segundos (toques, áudios de mensagem)",
+                prefs.ignorarCurtas,
+                vm::definirIgnorarCurtas,
+            )
+        }
+        item {
+            LinhaAcao(Icons.Rounded.Refresh, "Atualizar biblioteca", "${bib.musicas.size} faixas · ${bib.albuns.size} álbuns · ${bib.artistas.size} artistas") {
+                vm.carregarBiblioteca(forcar = true)
+            }
+        }
+
+        // ---- Letras ----
+        item { Secao("Letras e tradução") }
+        item {
+            LinhaChave(
+                "Buscar letras online",
+                "Quando a faixa não tem letra, oferece buscar na LRCLIB (gratuita, sem conta)",
+                prefs.buscaOnline,
+                vm::definirBuscaOnline,
+            )
+        }
+        item {
+            var aberto by remember { mutableStateOf(false) }
+            Box {
+                LinhaAcao(Icons.Rounded.Tune, "Idioma da tradução", nomeIdioma(prefs.idiomaTraducao)) { aberto = true }
+                DropdownMenu(expanded = aberto, onDismissRequest = { aberto = false }) {
+                    IDIOMAS_TRADUCAO.forEach { idioma ->
+                        DropdownMenuItem(
+                            text = { Text(idioma.nome) },
+                            onClick = { aberto = false; vm.ativarTraducao(idioma.codigo) },
+                            trailingIcon = { if (idioma.codigo == prefs.idiomaTraducao) Icon(Icons.Rounded.Check, contentDescription = "Selecionado") },
                         )
-
-                        HorizontalDivider(modifier = Modifier.padding(horizontal = 20.dp), color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-
-                        Column(modifier = Modifier.padding(20.dp)) {
-                            Text(
-                                "Paleta de cores",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "Escolha a cor de destaque do app. O modo claro/escuro acima continua funcionando com qualquer paleta.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
-                            Spacer(Modifier.height(16.dp))
-
-                            if (mostrarSeletorCorLivre) {
-                                SeletorCorLivre(
-                                    corInicial = corPersonalizadaAtual,
-                                    onCorEscolhida = onCorPersonalizadaEscolhida
-                                )
-                                Spacer(Modifier.height(12.dp))
-                                TextButton(onClick = { mostrarSeletorCorLivre = false }) {
-                                    Text("Voltar às paletas prontas")
-                                }
-                            } else {
-                                GradeTemas(
-                                    temaAtual = temaAtual,
-                                    corPersonalizada = corPersonalizadaAtual,
-                                    onTemaClick = onTemaEscolhido,
-                                    onPersonalizadoClick = { mostrarSeletorCorLivre = true },
-                                    altura = 480.dp
-                                )
-                            }
-                        }
                     }
                 }
             }
+        }
+        item {
+            LinhaChave(
+                "Traduzir automaticamente",
+                "Cada faixa com letra já abre traduzida",
+                prefs.traduzirAutomaticamente,
+                { if (it) vm.ativarTraducao() else vm.desativarTraducao() },
+            )
+        }
 
-            item {
-                Spacer(Modifier.height(8.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
-            }
-
-            item {
-                CabecalhoSecao(
-                    titulo = "Sobre",
-                    subtitulo = "SongV — player de música local",
-                    icone = Icons.Filled.Info,
-                    expandida = null,
-                    onClick = {}
+        // ---- Sobre ----
+        item { Secao("Sobre") }
+        item {
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                MarcaSongV()
+                Text(
+                    "Versão ${BuildConfig.VERSION_NAME} · player offline com letra sincronizada",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
+        item {
+            val sinal = cores.sinal
+            Row(
+                Modifier.fillMaxWidth().clickable { abrir(PERFIL_GITHUB) }.padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Rounded.Code, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(20.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        buildAnnotatedString {
+                            append("Feito por ")
+                            withStyle(SpanStyle(color = sinal)) { append("Victor K") }
+                        },
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text("github.com/victor-kauan-coder", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = "Abrir no navegador", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            }
+        }
+        item {
+            LinhaAcao(Icons.Rounded.Folder, "Código-fonte e novidades", "Repositório, wiki e versões no GitHub") { abrir(REPOSITORIO) }
+        }
+        item {
+            Text(
+                "Letras online: LRCLIB · Tradução: Google Tradutor · Fonte: Archivo (SIL Open Font License 1.1)",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+            )
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+
+    if (seletorCor) {
+        SeletorCorDialog(
+            inicial = corDoDestaque(Destaque.PERSONALIZADO, prefs.corPersonalizada),
+            onAplicar = { vm.definirCorPersonalizada(it.toArgb()); seletorCor = false },
+            onFechar = { seletorCor = false },
+        )
     }
 }
 
 @Composable
-private fun CabecalhoSecao(
-    titulo: String,
-    subtitulo: String,
-    icone: ImageVector,
-    expandida: Boolean?,
-    onClick: () -> Unit
-) {
+private fun Secao(titulo: String) {
+    Column {
+        HorizontalDivider(Modifier.padding(top = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
+        Text(
+            titulo,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 8.dp),
+        )
+    }
+}
+
+@Composable
+private fun LinhaChave(titulo: String, descricao: String, marcado: Boolean, onMudar: (Boolean) -> Unit) {
+    val cores = LocalCoresSongV.current
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = expandida != null, onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 18.dp),
-        verticalAlignment = Alignment.CenterVertically
+        Modifier.fillMaxWidth().clickable { onMudar(!marcado) }.padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(10.dp))
-                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(icone, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
+        Column(Modifier.weight(1f)) {
+            Text(titulo, style = MaterialTheme.typography.bodyLarge)
+            Text(descricao, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Spacer(Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(titulo, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text(
-                subtitulo,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-            )
-        }
-        if (expandida != null) {
-            Icon(
-                if (expandida) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-            )
+        Spacer(Modifier.width(16.dp))
+        Switch(marcado, onMudar, colors = SwitchDefaults.colors(checkedTrackColor = cores.sinal, checkedThumbColor = cores.noSinal))
+    }
+}
+
+@Composable
+private fun LinhaAcao(icone: androidx.compose.ui.graphics.vector.ImageVector, titulo: String, descricao: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 56.dp).clickable(onClick = onClick).padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icone, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.width(20.dp))
+        Column(Modifier.weight(1f)) {
+            Text(titulo, style = MaterialTheme.typography.bodyLarge)
+            Text(descricao, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
 
 @Composable
-private fun ItemLuminosidade(modoLuminosidade: ModoLuminosidade, onClick: () -> Unit) {
-    val escuro = modoLuminosidade == ModoLuminosidade.ESCURO
+private fun OpcaoPasta(nome: String, quantidade: Int, selecionada: Boolean, onClick: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
+        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        RadioButton(selecionada, onClick, colors = RadioButtonDefaults.colors(selectedColor = LocalCoresSongV.current.sinal))
+        Text(nome, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+        if (quantidade > 0) {
+            Text("$quantidade", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 12.dp))
+        }
+    }
+}
+
+@Composable
+private fun AmostraCor(cor: Color, rotulo: String, selecionada: Boolean, personalizada: Boolean, onClick: () -> Unit) {
+    Column(
+        Modifier.width(76.dp).clip(MaterialTheme.shapes.medium).clickable(onClick = onClick).padding(vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center
+            Modifier
+                .size(44.dp)
+                .border(2.dp, if (selecionada) MaterialTheme.colorScheme.onSurface else Color.Transparent, CircleShape)
+                .padding(4.dp)
+                .background(
+                    if (personalizada && !selecionada) Brush.sweepGradient(listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red))
+                    else Brush.linearGradient(listOf(cor, cor)),
+                    CircleShape,
+                ),
+            contentAlignment = Alignment.Center,
         ) {
-            Icon(
-                if (escuro) Icons.Filled.DarkMode else Icons.Filled.LightMode,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(20.dp)
-            )
+            if (selecionada) Icon(Icons.Rounded.Check, contentDescription = "Selecionada", tint = if (cor.luminanceSimples() > 0.5f) Color.Black else Color.White)
         }
-        Spacer(Modifier.width(14.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text("Modo escuro", style = MaterialTheme.typography.bodyLarge)
-            Text(
-                if (escuro) "Ativado" else "Desativado — usando modo claro",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-            )
-        }
-        Switch(checked = escuro, onCheckedChange = { onClick() })
+        Spacer(Modifier.height(6.dp))
+        Text(rotulo, style = MaterialTheme.typography.labelMedium, maxLines = 1)
     }
+}
+
+private fun Color.luminanceSimples() = 0.2126f * red + 0.7152f * green + 0.0722f * blue
+
+/** Seletor HSV: quadrado de saturação/brilho + faixa de matiz. */
+@Composable
+private fun SeletorCorDialog(inicial: Color, onAplicar: (Color) -> Unit, onFechar: () -> Unit) {
+    val hsv = remember(inicial) { FloatArray(3).also { android.graphics.Color.colorToHSV(inicial.toArgb(), it) } }
+    var matiz by remember { mutableFloatStateOf(hsv[0]) }
+    var saturacao by remember { mutableFloatStateOf(hsv[1].coerceAtLeast(0.3f)) }
+    var brilho by remember { mutableFloatStateOf(hsv[2].coerceAtLeast(0.5f)) }
+    val cor = Color(android.graphics.Color.HSVToColor(floatArrayOf(matiz, saturacao, brilho)))
+    val puro = Color(android.graphics.Color.HSVToColor(floatArrayOf(matiz, 1f, 1f)))
+    val densidade = LocalDensity.current
+
+    AlertDialog(
+        onDismissRequest = onFechar,
+        title = { Text("Sua cor") },
+        text = {
+            Column {
+                var tamanho by remember { mutableStateOf(IntSize.Zero) }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .clip(MaterialTheme.shapes.medium)
+                        .background(Brush.horizontalGradient(listOf(Color.White, puro)))
+                        .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black)))
+                        .onSizeChanged { tamanho = it }
+                        .pointerInput(Unit) {
+                            fun aplicar(x: Float, y: Float) {
+                                saturacao = (x / size.width).coerceIn(0f, 1f)
+                                brilho = (1f - y / size.height).coerceIn(0.25f, 1f)
+                            }
+                            detectTapGestures { aplicar(it.x, it.y) }
+                        }
+                        .pointerInput(Unit) {
+                            detectDragGestures { c, _ ->
+                                saturacao = (c.position.x / size.width).coerceIn(0f, 1f)
+                                brilho = (1f - c.position.y / size.height).coerceIn(0.25f, 1f)
+                            }
+                        },
+                ) {
+                    val raio = with(densidade) { 10.dp.toPx() }
+                    Box(
+                        Modifier
+                            .offset { IntOffset((saturacao * tamanho.width - raio).roundToInt(), ((1 - brilho) * tamanho.height - raio).roundToInt()) }
+                            .size(20.dp)
+                            .border(2.dp, Color.White, CircleShape),
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+                var largura by remember { mutableStateOf(0) }
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(28.dp)
+                        .clip(CircleShape)
+                        .background(Brush.horizontalGradient(listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red)))
+                        .onSizeChanged { largura = it.width }
+                        .pointerInput(Unit) { detectTapGestures { matiz = (it.x / size.width).coerceIn(0f, 1f) * 360f } }
+                        .pointerInput(Unit) { detectDragGestures { c, _ -> matiz = (c.position.x / size.width).coerceIn(0f, 1f) * 360f } },
+                ) {
+                    val meio = with(densidade) { 6.dp.toPx() }
+                    Box(
+                        Modifier
+                            .offset { IntOffset((matiz / 360f * largura - meio).roundToInt(), 0) }
+                            .size(12.dp, 28.dp)
+                            .border(2.dp, Color.White, CircleShape),
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(36.dp).background(cor, CircleShape))
+                    Spacer(Modifier.width(12.dp))
+                    Text("Prévia do destaque", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onAplicar(cor) }) { Text("Aplicar") } },
+        dismissButton = { TextButton(onClick = onFechar) { Text("Cancelar") } },
+    )
 }
