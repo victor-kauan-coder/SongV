@@ -1,29 +1,46 @@
 package com.songv.app.model
 
-import android.graphics.Bitmap
 import android.net.Uri
+import com.songv.app.data.normalizarBusca
 
 /**
- * Representa uma música encontrada na varredura local, já com as tags ID3 extraídas.
+ * Uma faixa da biblioteca local, com as tags já lidas (ID3 no MP3, MediaStore como reserva).
  *
- * @param id identificador estável (baseado no caminho do arquivo), usado como key em listas Compose
- * @param uri Uri de conteúdo (content://) usada pelo ExoPlayer e pelo MediaStore
- * @param caminhoArquivo caminho absoluto no disco, usado pelo parser ID3 manual
- * @param titulo de TIT2, ou o nome do arquivo se a tag não existir
- * @param artista de TPE1, ou "Artista desconhecido" se a tag não existir
- * @param capa Bitmap decodificado do frame APIC, ou null se não houver capa embutida
- * @param duracaoMs duração total da faixa, obtida via MediaMetadataRetriever
- * @param letra lista de linhas (com ou sem timestamp, dependendo de [tipoLetra])
- * @param tipoLetra indica se a letra é sincronizada, simples ou ausente
+ * A capa não fica aqui: bitmaps de centenas de faixas em memória eram o que deixava o app
+ * pesado. Ela é carregada sob demanda pelo [com.songv.app.data.CapaRepository].
+ *
+ * @param id `_ID` do MediaStore em texto — é a chave usada em favoritos, playlists e histórico.
+ * @param modificadoSeg data de modificação do arquivo; invalida caches (capa, índice da biblioteca).
  */
 data class Musica(
     val id: String,
     val uri: Uri,
-    val caminhoArquivo: String,
+    val caminho: String,
     val titulo: String,
     val artista: String,
-    val capa: Bitmap?,
+    val album: String,
+    val artistaAlbum: String,
+    val ano: Int?,
+    val faixa: Int?,
+    val disco: Int?,
     val duracaoMs: Long,
-    val letra: List<LinhaLetra>,
-    val tipoLetra: TipoLetra
-)
+    val adicionadaEmSeg: Long,
+    val modificadoSeg: Long,
+    val tamanhoBytes: Long,
+    val temCapa: Boolean,
+    val tipoLetra: TipoLetra,
+) {
+    val pasta: String get() = caminho.substringBeforeLast('/', "")
+    val ehMp3: Boolean get() = caminho.endsWith(".mp3", ignoreCase = true)
+
+    /** Texto sem acentos e em minúsculas, para a busca ("voce" encontra "Você"). */
+    val chaveBusca: String by lazy { normalizarBusca("$titulo $artista $album") }
+
+    /** Artistas individuais de uma faixa com participação ("A feat. B", "A, B", "A & B"). */
+    val artistas: List<String> by lazy { separarArtistas(artista) }
+}
+
+private val SEPARADORES_ARTISTA = Regex("""\s*(?:,|;|/|\s&\s|\sfeat\.?\s|\sft\.?\s|\sfeaturing\s)\s*""", RegexOption.IGNORE_CASE)
+
+fun separarArtistas(texto: String): List<String> =
+    texto.split(SEPARADORES_ARTISTA).map { it.trim() }.filter { it.isNotEmpty() }.distinct().ifEmpty { listOf(texto) }

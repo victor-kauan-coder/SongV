@@ -1,19 +1,30 @@
 package com.songv.app.model
 
 /**
- * Representa uma linha de letra.
- * @param texto O texto da linha.
- * @param tempoMs Timestamp em milissegundos de onde a linha começa a tocar.
- *                Null quando a letra é apenas estática (veio de USLT, sem sincronização).
+ * Uma linha de letra. [tempoMs] é null em letra sem sincronia. Texto vazio numa letra
+ * sincronizada marca um trecho instrumental (a tela mostra um indicador de pausa).
  */
 data class LinhaLetra(
     val texto: String,
-    val tempoMs: Long?
+    val tempoMs: Long?,
 )
 
-/** Tipo de letra disponível numa música, usado pra decidir como a UI deve exibir. */
-enum class TipoLetra {
-    SINCRONIZADA,  // veio do frame SYLT — dá pra destacar linha atual e navegar por toque
-    SIMPLES,       // veio do frame USLT — só texto corrido, sem tempo
-    AUSENTE        // não tinha nem SYLT nem USLT
+enum class TipoLetra { SINCRONIZADA, SIMPLES, AUSENTE }
+
+/** De onde a letra exibida veio — mostrado discretamente na tela de letra. */
+enum class FonteLetra(val rotulo: String) {
+    EMBUTIDA("Embutida no arquivo"),
+    ARQUIVO_LRC("Arquivo .lrc"),
+    ONLINE("LRCLIB"),
+    IMPORTADA("Importada"),
+}
+
+data class Letra(
+    val linhas: List<LinhaLetra>,
+    val tipo: TipoLetra,
+    val fonte: FonteLetra?,
+) {
+    companion object {
+        val AUSENTE = Letra(emptyList(), TipoLetra.AUSENTE, null)
+    }
 }
