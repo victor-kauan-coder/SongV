@@ -4,7 +4,6 @@
 
 <p align="center">
   <a href="https://github.com/victor-kauan-coder/SongV/releases/latest"><img src="https://img.shields.io/github/v/release/victor-kauan-coder/SongV?color=FF6B1A&label=vers%C3%A3o&style=flat-square" alt="Versão"></a>
-  <a href="https://github.com/victor-kauan-coder/SongV/actions/workflows/android.yml"><img src="https://img.shields.io/github/actions/workflow/status/victor-kauan-coder/SongV/android.yml?branch=main&label=build&style=flat-square" alt="Build"></a>
   <img src="https://img.shields.io/badge/Android-8.0%2B-1C130E?logo=android&logoColor=white&style=flat-square" alt="Android 8.0+">
   <img src="https://img.shields.io/badge/Kotlin-Jetpack%20Compose-1C130E?logo=kotlin&logoColor=white&style=flat-square" alt="Kotlin + Jetpack Compose">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licen%C3%A7a-MIT-1C130E?style=flat-square" alt="Licença MIT"></a>
