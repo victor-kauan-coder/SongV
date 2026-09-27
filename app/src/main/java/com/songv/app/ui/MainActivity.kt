@@ -86,6 +86,7 @@ import com.songv.app.ui.screens.ConfiguracoesScreen
 import com.songv.app.ui.screens.FilaScreen
 import com.songv.app.ui.screens.InicioScreen
 import com.songv.app.ui.screens.PermissaoScreen
+import com.songv.app.ui.screens.PesquisaLetraSheet
 import com.songv.app.ui.screens.PlayerScreen
 import com.songv.app.ui.screens.PlaylistScreen
 import com.songv.app.ui.theme.LocalCoresSongV
@@ -331,6 +332,11 @@ private fun Casca(vm: PlayerViewModel, nav: Navegador) {
                 actionColor = MaterialTheme.colorScheme.inversePrimary,
             )
         }
+    }
+
+    val estadoLetra by vm.letra.collectAsState()
+    if (estadoLetra.pesquisaAberta) {
+        PesquisaLetraSheet(vm, onFechar = vm::fecharPesquisaLetra)
     }
 
     nav.menuMusica?.let { m ->

@@ -111,6 +111,15 @@ fun InicioScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: PaddingVal
                     onAcao = { if (prefs.pastaBiblioteca.isBlank()) vm.carregarBiblioteca(forcar = true) else vm.definirPasta("") },
                 )
             }
+            if (prefs.pastaBiblioteca.isNotBlank()) {
+                item {
+                    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                        androidx.compose.material3.TextButton(onClick = { vm.carregarBiblioteca(forcar = true) }) {
+                            Text("Atualizar a pasta ${prefs.pastaBiblioteca}")
+                        }
+                    }
+                }
+            }
             return@LazyColumn
         }
 

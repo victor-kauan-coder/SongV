@@ -1,6 +1,30 @@
 package com.songv.app.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
+import com.songv.app.letra.CandidatoLetra
+import com.songv.app.letra.LetraRepository
+import com.songv.app.ui.components.BotaoPilula
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -214,9 +238,10 @@ fun OpcoesLetraSheet(
             )
         }
         if (buscaOnline) {
-            ItemFolha(Icons.Rounded.CloudDownload, if (estadoLetra.letra?.linhas.isNullOrEmpty()) "Buscar letra online" else "Buscar outra versão online") {
-                vm.buscarLetraOnline(); onFechar()
+            if (estadoLetra.letra?.linhas.isNullOrEmpty()) {
+                ItemFolha(Icons.Rounded.CloudDownload, "Buscar letra online") { vm.buscarLetraOnline(); onFechar() }
             }
+            ItemFolha(Icons.Rounded.Search, "Escolher outra versão…") { vm.abrirPesquisaLetra(); onFechar() }
         }
         ItemFolha(Icons.Rounded.FileOpen, "Importar arquivo .lrc") { onImportar(); onFechar() }
         if (vm.temLetraSalva()) {
@@ -249,4 +274,144 @@ private fun ItemFolha(icone: ImageVector, texto: String, onClick: () -> Unit) {
         Spacer(Modifier.width(20.dp))
         Text(texto, style = MaterialTheme.typography.bodyLarge)
     }
+}
+
+/**
+ * Pesquisa manual de letra: quando a busca automática erra (tags vindas do YouTube, versão ao
+ * vivo, artista escrito diferente), dá para ajustar título e artista e escolher a versão.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PesquisaLetraSheet(vm: PlayerViewModel, onFechar: () -> Unit) {
+    val sugestao = remember { vm.sugestaoPesquisaLetra() }
+    var titulo by rememberSaveable { mutableStateOf(sugestao?.titulo.orEmpty()) }
+    var artista by rememberSaveable { mutableStateOf(sugestao?.artista.orEmpty()) }
+    var rodada by remember { mutableIntStateOf(0) }
+    var resultado by remember { mutableStateOf<LetraRepository.Pesquisa?>(null) }
+    val foco = LocalFocusManager.current
+
+    LaunchedEffect(rodada) {
+        resultado = null
+        if (titulo.isNotBlank()) resultado = vm.pesquisarLetras(titulo, artista)
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onFechar,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(Modifier.navigationBarsPadding().padding(bottom = 8.dp)) {
+            Text("Buscar letra", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp))
+            Text(
+                "Ajuste o título e o artista se a busca automática errou. As letras vêm da LRCLIB.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+            )
+            val buscar: () -> Unit = {
+                foco.clearFocus()
+                rodada++
+            }
+            OutlinedTextField(
+                value = titulo,
+                onValueChange = { titulo = it },
+                label = { Text("Título") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
+            )
+            OutlinedTextField(
+                value = artista,
+                onValueChange = { artista = it },
+                label = { Text("Artista") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { buscar() }),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 4.dp),
+            )
+            Row(Modifier.padding(horizontal = 24.dp, vertical = 8.dp)) {
+                BotaoPilula("Buscar", onClick = buscar, icone = Icons.Rounded.Search)
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Box(Modifier.fillMaxWidth().heightIn(min = 160.dp, max = 460.dp)) {
+                when (val r = resultado) {
+                    null -> CircularProgressIndicator(
+                        color = LocalCoresSongV.current.sinal,
+                        modifier = Modifier.align(Alignment.Center).size(32.dp),
+                    )
+                    LetraRepository.Pesquisa.SemConexao -> AvisoPesquisa("Sem internet", "Conecte-se para buscar letras.", null)
+                    LetraRepository.Pesquisa.Falha -> AvisoPesquisa("A LRCLIB não respondeu", "Pode ser instabilidade momentânea.") { rodada++ }
+                    is LetraRepository.Pesquisa.Ok -> if (r.candidatos.isEmpty()) {
+                        AvisoPesquisa("Nada encontrado", "Tente só o título, sem detalhes como ao vivo ou o nome do álbum.", null)
+                    } else {
+                        LazyColumn {
+                            items(r.candidatos, key = { it.id }) { c ->
+                                LinhaCandidato(c, recomendada = c == r.candidatos.first() && c.aceitavel) { vm.aplicarLetraEscolhida(c) }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AvisoPesquisa(titulo: String, texto: String, onTentar: (() -> Unit)?) {
+    Column(Modifier.fillMaxWidth().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(titulo, style = MaterialTheme.typography.titleMedium)
+        Text(texto, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (onTentar != null) TextButton(onClick = onTentar) { Text("Tentar de novo") }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LinhaCandidato(c: CandidatoLetra, recomendada: Boolean, onEscolher: () -> Unit) {
+    val cores = LocalCoresSongV.current
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clickable(onClickLabel = "Usar esta letra", onClick = onEscolher)
+            .padding(horizontal = 24.dp, vertical = 12.dp),
+    ) {
+        Text(c.faixa, style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(
+            listOf(c.artista, c.album).filter { it.isNotBlank() }.joinToString(" · "),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(Modifier.height(6.dp))
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (recomendada) Selo("Recomendada", cores.sinal, cores.noSinal)
+            when {
+                c.temSincronia -> Selo("Sincronizada", MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.colorScheme.onSecondaryContainer)
+                c.instrumental -> Selo("Instrumental", MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.onSurfaceVariant)
+                else -> Selo("Sem sincronia", MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            val duracao = formatarTempo((c.duracaoSeg * 1000).toLong())
+            val diferenca = c.diferencaSeg
+            Selo(
+                when {
+                    diferenca == null -> duracao
+                    diferenca <= 2 -> "$duracao · mesma duração"
+                    else -> "$duracao · ${diferenca}s de diferença"
+                },
+                MaterialTheme.colorScheme.surfaceContainerHighest,
+                MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun Selo(texto: String, fundo: Color, frente: Color) {
+    Text(
+        texto,
+        style = MaterialTheme.typography.labelSmall.merge(EstilosSongV.numeros),
+        color = frente,
+        modifier = Modifier.background(fundo, CircleShape).padding(horizontal = 10.dp, vertical = 4.dp),
+    )
 }

@@ -310,6 +310,7 @@ fun SemLetra(
     onBuscarOnline: () -> Unit,
     onImportar: () -> Unit,
     modifier: Modifier = Modifier,
+    onPesquisar: (() -> Unit)? = null,
 ) {
     Column(modifier.fillMaxWidth().padding(horizontal = 32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Text("Esta faixa não tem letra", style = MaterialTheme.typography.titleLarge, color = Color.White, textAlign = TextAlign.Center)
@@ -335,6 +336,11 @@ fun SemLetra(
                 Icon(Icons.Rounded.FileOpen, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(8.dp))
                 Text("Importar arquivo .lrc", style = MaterialTheme.typography.labelLarge)
+            }
+        }
+        if (buscaOnlineHabilitada && onPesquisar != null && !buscando) {
+            androidx.compose.material3.TextButton(onClick = onPesquisar) {
+                Text("Pesquisar por título e artista", color = Color.White.copy(alpha = 0.8f))
             }
         }
     }

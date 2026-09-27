@@ -2,6 +2,22 @@
 
 Todas as mudanças relevantes do SongV. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
+## [2.0.1] — 2026-09-27
+
+### Correções
+- **Busca de letra online** não achava músicas que existem na LRCLIB. Agora:
+  - a duração do arquivo não descarta mais resultados (clipes e versões com intro mais longa ficavam de fora pelo filtro de ±4 s);
+  - títulos vindos do YouTube são limpos (`(Official Music Video)`, `| Legendado`, `- Clipe Oficial`, `feat.`…) e nomes de canal viram artista (`ImagineDragonsVEVO` → Imagine Dragons, `Banda - Topic` → Banda);
+  - "Artista - Música" no título é tentado nas duas leituras;
+  - as consultas rodam em paralelo, com nova tentativa quando a LRCLIB responde 429/5xx;
+  - os resultados recebem nota por título, artista, duração e sincronia, e a versão sincronizada é preferida.
+- Quando não há internet validada (rede local sem saída), o app não bloqueia mais a busca antes de tentar.
+- A biblioteca se atualiza sozinha quando músicas são copiadas, apagadas ou alteradas com o app aberto.
+
+### Novidades
+- **Escolher outra versão da letra**: pesquisa manual por título e artista, com selos de *Recomendada*, *Sincronizada* e diferença de duração.
+- Botão para atualizar a pasta da biblioteca na tela inicial vazia.
+
 ## [2.0.0] — 2026-09-26
 
 Reformulação completa: nova identidade visual, nova navegação, letras tratadas como legendas e dezenas de correções.
@@ -61,4 +77,5 @@ Reformulação completa: nova identidade visual, nova navegação, letras tratad
 
 Primeira versão: biblioteca da pasta Music, player com letra `SYLT`/`USLT`, favoritos, playlists, fila e temas de cor.
 
+[2.0.1]: https://github.com/victor-kauan-coder/SongV/releases/tag/v2.0.1
 [2.0.0]: https://github.com/victor-kauan-coder/SongV/releases/tag/v2.0.0

@@ -1,6 +1,10 @@
 package com.songv.app.player
 
 import android.app.Application
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
+import android.provider.MediaStore
 import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.lifecycle.AndroidViewModel
@@ -22,6 +26,8 @@ import com.songv.app.data.Preferencias
 import com.songv.app.data.Sessao
 import com.songv.app.data.comparadorAlfabetico
 import com.songv.app.data.normalizarBusca
+import com.songv.app.letra.BuscaLetra
+import com.songv.app.letra.CandidatoLetra
 import com.songv.app.letra.LetraRepository
 import com.songv.app.letra.TradutorLetra
 import com.songv.app.letra.nomeIdioma
@@ -95,6 +101,8 @@ data class EstadoLetra(
     val traducao: TradutorLetra.Traducao? = null,
     val traduzindo: Boolean = false,
     val avisoTraducao: String? = null,
+    /** Folha de pesquisa manual de letra aberta (título/artista editáveis + lista de versões). */
+    val pesquisaAberta: Boolean = false,
 )
 
 data class Mensagem(val texto: String, val acao: String? = null, val aoAgir: (() -> Unit)? = null)
@@ -170,8 +178,28 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * Relê a biblioteca sozinho quando o Android indexa, apaga ou altera músicas (arquivos
+     * copiados com o app aberto, downloads do agente…). Várias mudanças seguidas viram uma só
+     * releitura, e ela é barata: o índice em disco evita reler faixas que não mudaram.
+     */
+    private var jobReleitura: Job? = null
+    private val observadorMidia = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            if (!_biblioteca.value.pronta) return
+            jobReleitura?.cancel()
+            jobReleitura = viewModelScope.launch {
+                delay(2_500)
+                carregarBiblioteca(forcar = true, silencioso = true)
+            }
+        }
+    }
+
     init {
         player.addListener(ouvinte)
+        runCatching {
+            application.contentResolver.registerContentObserver(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, observadorMidia)
+        }
         sincronizarFila()
         viewModelScope.launch {
             // Enquanto toca, salva a sessão de tempos em tempos (queda de bateria, app morto pelo sistema…).
@@ -187,12 +215,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     // =========================================================================
 
     /** Lê a biblioteca. Sem [forcar], não faz nada se já carregou — girar a tela não reinicia nada. */
-    fun carregarBiblioteca(forcar: Boolean = false) {
+    fun carregarBiblioteca(forcar: Boolean = false, silencioso: Boolean = false) {
         if (jobBiblioteca?.isActive == true) return
         if (!forcar && _biblioteca.value.pronta) return
         jobBiblioteca = viewModelScope.launch {
             val p = preferencias.first { it.carregadas }
-            _biblioteca.update { it.copy(carregando = true, erro = null, lidas = 0, total = 0) }
+            // Releitura automática não mostra a barra de progresso: a lista antiga continua na tela até a nova chegar.
+            if (!silencioso) _biblioteca.update { it.copy(carregando = true, erro = null, lidas = 0, total = 0) }
             try {
                 val inicio = System.currentTimeMillis()
                 val musicas = app.musicas.varrer(p.pastaBiblioteca, p.ignorarCurtas) { lidas, total ->
@@ -481,15 +510,56 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             _letra.update { it.copy(buscando = true) }
             val r = app.letras.buscarOnline(m)
             _letra.update { it.copy(buscando = false) }
-            when (r) {
-                is LetraRepository.ResultadoBusca.Encontrada -> {
-                    aplicarLetraNova(m, r.letra)
-                    avisar(if (r.letra.tipo == TipoLetra.SINCRONIZADA) "Letra sincronizada encontrada" else "Letra encontrada, mas sem sincronia")
+            tratarResultadoBusca(m, r)
+        }
+    }
+
+    private fun tratarResultadoBusca(m: Musica, r: LetraRepository.ResultadoBusca) {
+        when (r) {
+            is LetraRepository.ResultadoBusca.Encontrada -> {
+                aplicarLetraNova(m, r.letra)
+                val diferenca = r.diferencaSeg ?: 0
+                when {
+                    r.letra.tipo != TipoLetra.SINCRONIZADA -> avisar("Letra encontrada, mas sem sincronia", "Outras versões") { abrirPesquisaLetra() }
+                    diferenca > 3 -> avisar(
+                        "Letra sincronizada de uma versão com ${diferenca}s de diferença. Se sair do tempo, ajuste em Sincronia.",
+                        "Outras versões",
+                    ) { abrirPesquisaLetra() }
+                    else -> avisar("Letra sincronizada encontrada")
                 }
-                LetraRepository.ResultadoBusca.Instrumental -> avisar("Esta faixa está marcada como instrumental na LRCLIB.")
-                LetraRepository.ResultadoBusca.NaoEncontrada -> avisar("Nenhuma letra encontrada para “${m.titulo}”.")
-                LetraRepository.ResultadoBusca.SemConexao -> avisar("Sem internet. Conecte-se para buscar a letra.")
-                LetraRepository.ResultadoBusca.Falha -> avisar("A busca falhou.", "Tentar de novo") { buscarLetraOnline() }
+            }
+            LetraRepository.ResultadoBusca.Instrumental -> avisar("Esta faixa está marcada como instrumental na LRCLIB.")
+            LetraRepository.ResultadoBusca.NaoEncontrada ->
+                avisar("Não achei uma letra confiável para “${m.titulo}”.", "Pesquisar") { abrirPesquisaLetra() }
+            LetraRepository.ResultadoBusca.SemConexao -> avisar("Sem internet. Conecte-se para buscar a letra.")
+            LetraRepository.ResultadoBusca.Falha -> avisar("A LRCLIB não respondeu.", "Tentar de novo") { buscarLetraOnline() }
+        }
+    }
+
+    // ---- Pesquisa manual de letra (editar título/artista e escolher a versão) ----
+
+    fun abrirPesquisaLetra() = _letra.update { it.copy(pesquisaAberta = true) }
+    fun fecharPesquisaLetra() = _letra.update { it.copy(pesquisaAberta = false) }
+
+    /** Título e artista limpos da faixa atual, para preencher a pesquisa. */
+    fun sugestaoPesquisaLetra(): BuscaLetra.Consulta? =
+        _reproducao.value.atual?.let { BuscaLetra.consulta(it.titulo, it.artista) }
+
+    suspend fun pesquisarLetras(titulo: String, artista: String): LetraRepository.Pesquisa {
+        val m = _reproducao.value.atual ?: return LetraRepository.Pesquisa.Falha
+        return app.letras.pesquisar(titulo, artista, m)
+    }
+
+    fun aplicarLetraEscolhida(c: CandidatoLetra) {
+        val m = _reproducao.value.atual ?: return
+        viewModelScope.launch {
+            val r = withContext(Dispatchers.IO) { app.letras.aplicar(m, c) }
+            fecharPesquisaLetra()
+            if (r is LetraRepository.ResultadoBusca.Encontrada) {
+                aplicarLetraNova(m, r.letra)
+                avisar(if (r.letra.tipo == TipoLetra.SINCRONIZADA) "Letra aplicada" else "Letra aplicada (sem sincronia)")
+            } else {
+                tratarResultadoBusca(m, r)
             }
         }
     }
@@ -772,6 +842,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     override fun onCleared() {
         salvarSessao()
         player.removeListener(ouvinte)
+        runCatching { getApplication<Application>().contentResolver.unregisterContentObserver(observadorMidia) }
         super.onCleared()
     }
 }

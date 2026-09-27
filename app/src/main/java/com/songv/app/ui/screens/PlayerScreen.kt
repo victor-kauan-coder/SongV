@@ -485,7 +485,7 @@ private fun PreviaLetra(
     ) {
         if (letra.tipo == TipoLetra.AUSENTE) {
             Box(Modifier.padding(vertical = 24.dp)) {
-                SemLetra(estadoLetra.buscando, buscaOnline, vm::buscarLetraOnline, onImportar)
+                SemLetra(estadoLetra.buscando, buscaOnline, vm::buscarLetraOnline, onImportar, onPesquisar = vm::abrirPesquisaLetra)
             }
             return@Surface
         }
@@ -586,7 +586,7 @@ private fun ModoLetra(
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when {
                 letra == null -> CarregandoLetra(Modifier.align(Alignment.Center))
-                letra.tipo == TipoLetra.AUSENTE -> SemLetra(estadoLetra.buscando, prefs.buscaOnline, vm::buscarLetraOnline, onImportar, Modifier.align(Alignment.Center))
+                letra.tipo == TipoLetra.AUSENTE -> SemLetra(estadoLetra.buscando, prefs.buscaOnline, vm::buscarLetraOnline, onImportar, Modifier.align(Alignment.Center), onPesquisar = vm::abrirPesquisaLetra)
                 else -> {
                     val p by vm.progresso.collectAsState()
                     LetraView(

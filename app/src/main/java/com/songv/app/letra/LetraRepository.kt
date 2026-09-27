@@ -14,7 +14,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.net.URLEncoder
-import kotlin.math.abs
+import com.songv.app.model.separarArtistas
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import java.net.ConnectException
+import java.net.UnknownHostException
 
 /**
  * Descobre qual letra mostrar para uma faixa e busca/importa letras quando falta.
@@ -25,7 +30,8 @@ import kotlin.math.abs
 class LetraRepository(private val context: Context) {
 
     sealed interface ResultadoBusca {
-        data class Encontrada(val letra: Letra) : ResultadoBusca
+        /** [diferencaSeg]: diferença de duração da versão encontrada para a faixa local. */
+        data class Encontrada(val letra: Letra, val diferencaSeg: Int? = null) : ResultadoBusca
         data object Instrumental : ResultadoBusca
         data object NaoEncontrada : ResultadoBusca
         data object SemConexao : ResultadoBusca
@@ -59,38 +65,108 @@ class LetraRepository(private val context: Context) {
         Letra.AUSENTE
     }
 
-    /** Busca na LRCLIB: primeiro pela assinatura exata (título/artista/álbum/duração), depois pela busca. */
-    suspend fun buscarOnline(m: Musica): ResultadoBusca = withContext(Dispatchers.IO) {
-        if (!Rede.temConexao(context)) return@withContext ResultadoBusca.SemConexao
-        try {
-            val titulo = limparTitulo(m.titulo)
-            val artista = m.artistas.first()
-            val duracaoSeg = (m.duracaoMs / 1000).toInt()
+    /** Resultado de uma pesquisa na LRCLIB: versões pontuadas (a melhor primeiro) ou o motivo da falha. */
+    sealed interface Pesquisa {
+        data class Ok(val candidatos: List<CandidatoLetra>) : Pesquisa
+        data object SemConexao : Pesquisa
+        data object Falha : Pesquisa
+    }
 
-            val exata = Rede.requisitar(
-                "$LRCLIB/get?track_name=${enc(titulo)}&artist_name=${enc(artista)}" +
-                    (if (m.album.isNotBlank()) "&album_name=${enc(m.album)}" else "") +
-                    (if (duracaoSeg > 0) "&duration=$duracaoSeg" else ""),
-            )
-            val candidato: JSONObject? = if (exata.codigo == 200) {
-                JSONObject(exata.corpo)
-            } else {
-                val busca = Rede.requisitar("$LRCLIB/search?track_name=${enc(titulo)}&artist_name=${enc(artista)}")
-                if (busca.codigo != 200) return@withContext ResultadoBusca.Falha
-                melhorResultado(JSONArray(busca.corpo), duracaoSeg)
+    /** Busca automática: aplica a melhor versão encontrada, se houver uma confiável. */
+    suspend fun buscarOnline(m: Musica): ResultadoBusca {
+        return when (val p = pesquisar(BuscaLetra.consultas(m.titulo, m.artista), m)) {
+            Pesquisa.SemConexao -> ResultadoBusca.SemConexao
+            Pesquisa.Falha -> ResultadoBusca.Falha
+            is Pesquisa.Ok -> {
+                val melhor = p.candidatos.firstOrNull { it.aceitavel } ?: return ResultadoBusca.NaoEncontrada
+                withContext(Dispatchers.IO) { aplicar(m, melhor) }
             }
-            if (candidato == null) return@withContext ResultadoBusca.NaoEncontrada
-            if (candidato.optBoolean("instrumental")) return@withContext ResultadoBusca.Instrumental
+        }
+    }
 
-            val sincronizada = candidato.textoOuNull("syncedLyrics")
-            val simples = candidato.textoOuNull("plainLyrics")
-            val texto = sincronizada ?: simples ?: return@withContext ResultadoBusca.NaoEncontrada
-            val letra = deTexto(texto, FonteLetra.ONLINE)
-            if (letra.tipo == TipoLetra.AUSENTE) return@withContext ResultadoBusca.NaoEncontrada
-            salvar(m, texto, FonteLetra.ONLINE)
-            ResultadoBusca.Encontrada(letra)
-        } catch (_: Exception) {
-            ResultadoBusca.Falha
+    /**
+     * Pesquisa na LRCLIB por várias estratégias ao mesmo tempo — assinatura exata, título+artista
+     * e texto livre — e junta tudo numa lista pontuada. Se nada confiável aparecer, tenta ainda só
+     * pelo título. Cada chamada tenta de novo quando a LRCLIB responde 503/429 (acontece bastante).
+     */
+    /** Pesquisa manual, com o título e o artista digitados pelo usuário. */
+    suspend fun pesquisar(titulo: String, artista: String, m: Musica): Pesquisa =
+        pesquisar(listOf(BuscaLetra.Consulta(titulo.trim(), artista.trim())), m)
+
+    suspend fun pesquisar(consultas: List<BuscaLetra.Consulta>, m: Musica): Pesquisa = withContext(Dispatchers.IO) {
+        if (!Rede.temConexao(context)) return@withContext Pesquisa.SemConexao
+        val duracaoSeg = (m.duracaoMs / 1000).toInt()
+        val encontrados = LinkedHashMap<Long, CandidatoLetra>()
+        var respostas = 0
+        var semRede = 0
+
+        suspend fun rodada(urls: List<String>) {
+            val resultados = coroutineScope {
+                urls.distinct().map { url -> async { runCatching { Rede.requisitarComRetry(url) } } }.awaitAll()
+            }
+            resultados.forEach { r ->
+                r.onSuccess { resp ->
+                    respostas++
+                    if (resp.codigo == 200) runCatching { lerCandidatos(resp.corpo) }.getOrNull()?.forEach { encontrados.putIfAbsent(it.id, it) }
+                }.onFailure { e -> if (e is UnknownHostException || e is ConnectException) semRede++ }
+            }
+        }
+
+        fun pontuados() = encontrados.values
+            .map { BuscaLetra.pontuar(it, consultas, m.artistas, duracaoSeg) }
+            .sortedWith(compareByDescending<CandidatoLetra> { it.aceitavel }.thenByDescending { it.pontuacao })
+
+        rodada(
+            consultas.flatMap { c ->
+                val principal = separarArtistas(c.artista).firstOrNull().orEmpty().ifEmpty { c.artista }
+                val t = enc(c.titulo)
+                val a = enc(principal)
+                listOfNotNull(
+                    "$LRCLIB/search?track_name=$t&artist_name=$a".takeIf { principal.isNotBlank() },
+                    "$LRCLIB/search?q=${enc("$principal ${c.titulo}".trim())}",
+                    "$LRCLIB/get?track_name=$t&artist_name=$a&duration=$duracaoSeg".takeIf { duracaoSeg > 0 && principal.isNotBlank() },
+                )
+            },
+        )
+        if (pontuados().none { it.aceitavel }) {
+            rodada(consultas.flatMap { c -> listOf("$LRCLIB/search?track_name=${enc(c.titulo)}", "$LRCLIB/search?q=${enc(c.titulo)}") })
+        }
+        when {
+            respostas == 0 && semRede > 0 -> Pesquisa.SemConexao
+            respostas == 0 -> Pesquisa.Falha
+            else -> Pesquisa.Ok(pontuados().take(25))
+        }
+    }
+
+    /** Salva a versão escolhida (automática ou pelo usuário) como a letra da faixa. */
+    fun aplicar(m: Musica, c: CandidatoLetra): ResultadoBusca {
+        if (c.instrumental && c.sincronizada == null && c.simples == null) return ResultadoBusca.Instrumental
+        val texto = c.sincronizada ?: c.simples ?: return ResultadoBusca.NaoEncontrada
+        val letra = deTexto(texto, FonteLetra.ONLINE)
+        if (letra.tipo == TipoLetra.AUSENTE) return ResultadoBusca.NaoEncontrada
+        salvar(m, texto, FonteLetra.ONLINE)
+        return ResultadoBusca.Encontrada(letra, c.diferencaSeg)
+    }
+
+    private fun lerCandidatos(json: String): List<CandidatoLetra> {
+        val bruto = json.trim()
+        val lista = if (bruto.startsWith("[")) {
+            JSONArray(bruto).let { a -> List(a.length()) { a.getJSONObject(it) } }
+        } else {
+            listOf(JSONObject(bruto))
+        }
+        return lista.mapNotNull { o ->
+            val id = o.optLong("id", -1).takeIf { it >= 0 } ?: return@mapNotNull null
+            CandidatoLetra(
+                id = id,
+                faixa = o.optString("trackName"),
+                artista = o.optString("artistName"),
+                album = if (o.isNull("albumName")) "" else o.optString("albumName"),
+                duracaoSeg = o.optDouble("duration", 0.0),
+                sincronizada = o.textoOuNull("syncedLyrics"),
+                simples = o.textoOuNull("plainLyrics"),
+                instrumental = o.optBoolean("instrumental"),
+            )
         }
     }
 
@@ -124,15 +200,6 @@ class LetraRepository(private val context: Context) {
         return runCatching { deTexto(arquivo.readText(), fonte) }.getOrNull()?.takeIf { it.tipo != TipoLetra.AUSENTE }
     }
 
-    private fun melhorResultado(resultados: JSONArray, duracaoSeg: Int): JSONObject? {
-        val lista = List(resultados.length()) { resultados.getJSONObject(it) }
-        fun diferenca(o: JSONObject) = if (duracaoSeg > 0) abs(o.optDouble("duration", 0.0) - duracaoSeg) else 0.0
-        val proximos = lista.filter { diferenca(it) <= 4 }.ifEmpty { if (duracaoSeg > 0) emptyList() else lista }
-        return proximos.sortedWith(
-            compareByDescending<JSONObject> { it.textoOuNull("syncedLyrics") != null }.thenBy { diferenca(it) },
-        ).firstOrNull()
-    }
-
     companion object {
         private const val LRCLIB = "https://lrclib.net/api"
 
@@ -148,12 +215,8 @@ class LetraRepository(private val context: Context) {
             return if (linhas.any { it.texto.isNotEmpty() }) Letra(linhas, TipoLetra.SIMPLES, fonte) else Letra.AUSENTE
         }
 
-        /** Tira "(Official Video)", "[Lyrics]", "- Remastered 2011", "(feat. X)" do título antes de buscar. */
-        fun limparTitulo(titulo: String): String = titulo
-            .replace(Regex("""\s*[(\[][^)\]]*(official|video|lyric|audio|visualizer|remaster|feat\.?|ft\.)[^)\]]*[)\]]""", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("""\s+-\s+.*remaster.*$""", RegexOption.IGNORE_CASE), "")
-            .trim()
-            .ifEmpty { titulo }
+        /** Título pronto para buscar (sem "(Official Video)", "Artista - ", "| Legendado", "feat."…). */
+        fun limparTitulo(titulo: String): String = BuscaLetra.consulta(titulo, "").titulo
 
         private fun enc(s: String) = URLEncoder.encode(s, "UTF-8")
 
