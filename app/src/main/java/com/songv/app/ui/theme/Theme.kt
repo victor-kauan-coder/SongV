@@ -10,6 +10,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.songv.app.data.Destaque
+import com.songv.app.data.EstiloVisual
+import com.songv.app.data.FundoTema
 import com.songv.app.data.ModoTema
 
 /** Cantos contidos, de equipamento — nada de pílulas em tudo. */
@@ -24,10 +26,21 @@ val FormasSongV = Shapes(
 fun corDoDestaque(destaque: Destaque, personalizada: Int?): Color =
     if (destaque == Destaque.PERSONALIZADO && personalizada != null) Color(personalizada) else Color(destaque.argb)
 
+/** Cor de fundo para o tema atual; a cor livre é levada para uma faixa em que o texto continua legível. */
+fun corDoFundo(fundo: FundoTema, personalizada: Int?, escuro: Boolean): Color =
+    if (fundo == FundoTema.PERSONALIZADO && personalizada != null) {
+        ajustarFundo(Color(personalizada), escuro)
+    } else {
+        Color(if (escuro) fundo.escuro else fundo.claro)
+    }
+
 @Composable
 fun SongVTheme(
     modo: ModoTema = ModoTema.ESCURO,
     destaque: Color = Marca.Laranja,
+    fundo: FundoTema = FundoTema.GRAFITE,
+    corFundo: Int? = null,
+    estilo: EstiloVisual = EstiloVisual.ATUAL,
     content: @Composable () -> Unit,
 ) {
     val escuro = when (modo) {
@@ -35,9 +48,11 @@ fun SongVTheme(
         ModoTema.CLARO -> false
         ModoTema.SISTEMA -> isSystemInDarkTheme()
     }
-    val esquema = remember(destaque, escuro) { if (escuro) esquemaEscuro(destaque) else esquemaClaro(destaque) }
+    val base = remember(fundo, corFundo, escuro) { corDoFundo(fundo, corFundo, escuro) }
+    val esquema = remember(destaque, escuro, base) { if (escuro) esquemaEscuro(destaque, base) else esquemaClaro(destaque, base) }
     val cores = remember(destaque, escuro) { coresSongV(destaque, escuro) }
-    CompositionLocalProvider(LocalCoresSongV provides cores) {
+    val acabamento = remember(estilo, escuro, destaque, base) { Acabamento(estilo, escuro, destaque, base) }
+    CompositionLocalProvider(LocalCoresSongV provides cores, LocalAcabamento provides acabamento) {
         MaterialTheme(colorScheme = esquema, typography = TipografiaSongV, shapes = FormasSongV, content = content)
     }
 }

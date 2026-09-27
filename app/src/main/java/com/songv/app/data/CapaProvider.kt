@@ -16,7 +16,7 @@ import java.io.FileNotFoundException
  * bloqueio, controles de mídia do Android 13+, Bluetooth e Android Auto. Somente leitura e só
  * capas — nenhum outro arquivo é exposto.
  *
- * URI: content://com.songv.app.capas/capa/<id do MediaStore>/<data de modificação>
+ * URI: content://com.songv.app.capas/capa/<id do MediaStore>/<data de modificação>[/<capa própria>]
  */
 class CapaProvider : ContentProvider() {
 
@@ -25,7 +25,8 @@ class CapaProvider : ContentProvider() {
     override fun openFile(uri: Uri, mode: String): ParcelFileDescriptor {
         if (mode != "r") throw SecurityException("As capas são somente leitura")
         val partes = uri.pathSegments
-        if (partes.size != 3 || partes[0] != "capa") throw FileNotFoundException(uri.toString())
+        // O 4º segmento (opcional) só identifica a versão de uma capa escolhida à mão.
+        if (partes.size !in 3..4 || partes[0] != "capa") throw FileNotFoundException(uri.toString())
         val id = partes[1].toLongOrNull() ?: throw FileNotFoundException(uri.toString())
         val modificado = partes[2].toLongOrNull() ?: throw FileNotFoundException(uri.toString())
         val app = context?.applicationContext as? SongVApp ?: throw FileNotFoundException(uri.toString())

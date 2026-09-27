@@ -1,5 +1,7 @@
 package com.songv.app.ui.screens
 
+import com.songv.app.ui.theme.acabamento
+import com.songv.app.ui.theme.corDeFolha
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -36,6 +38,7 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.AddPhotoAlternate
 import androidx.compose.material.icons.rounded.QueuePlayNext
 import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.Search
@@ -100,7 +103,8 @@ import com.songv.app.ui.components.rememberEstadoReordenacao
 private fun corDaCapa(musica: Musica?): Color {
     val capas = LocalCapas.current
     val base = MaterialTheme.colorScheme.background
-    val cor by produceState<Color?>(null, musica?.id) { value = musica?.let { capas.corDominante(it) }?.let { Color(it) } }
+    val propria = com.songv.app.ui.components.LocalCapasProprias.current[musica?.id]
+    val cor by produceState<Color?>(null, musica?.id, propria) { value = musica?.let { capas.corDominante(it) }?.let { Color(it) } }
     return cor?.let { lerp(base, it, 0.38f) } ?: MaterialTheme.colorScheme.surfaceContainer
 }
 
@@ -118,8 +122,7 @@ private fun CabecalhoColecao(
     acoes: @Composable () -> Unit = {},
 ) {
     val tinta = corDaCapa(faixaDaCor)
-    val fundo = MaterialTheme.colorScheme.background
-    Box(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(tinta, fundo)))) {
+    Box(Modifier.fillMaxWidth().background(Brush.verticalGradient(listOf(tinta, tinta.copy(alpha = 0f))))) {
         Column(Modifier.fillMaxWidth().statusBarsPadding().padding(bottom = 8.dp)) {
             Row(Modifier.padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onVoltar) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Voltar") }
@@ -192,6 +195,9 @@ fun AlbumScreen(vm: PlayerViewModel, nav: Navegador, chave: String, contentPaddi
                 onTocar = { if (tocandoEste) vm.alternarPlayPause() else vm.tocar(album.musicas, origem = origem) },
                 onAleatorio = { vm.tocar(album.musicas, origem = origem, aleatorio = true) },
                 acoes = {
+                    IconButton(onClick = { nav.trocarCapa = album.musicas }) {
+                        Icon(Icons.Rounded.AddPhotoAlternate, contentDescription = "Trocar a capa do álbum")
+                    }
                     IconButton(onClick = { vm.tocarAseguir(album.musicas) }) { Icon(Icons.Rounded.QueuePlayNext, contentDescription = "Tocar álbum a seguir") }
                     IconButton(onClick = { nav.paraPlaylist = album.musicas }) { Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, contentDescription = "Adicionar álbum a uma playlist") }
                 },
@@ -486,7 +492,7 @@ private fun AdicionarFaixasSheet(
     ModalBottomSheet(
         onDismissRequest = onFechar,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        containerColor = acabamento.corDeFolha(MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(Modifier.navigationBarsPadding()) {
             Row(Modifier.padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {

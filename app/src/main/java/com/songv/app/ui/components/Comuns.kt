@@ -70,6 +70,9 @@ import com.songv.app.model.Musica
 import com.songv.app.model.TipoLetra
 import com.songv.app.ui.theme.EstilosSongV
 import com.songv.app.ui.theme.LocalCoresSongV
+import com.songv.app.ui.theme.acabamento
+import com.songv.app.ui.theme.realce
+import com.songv.app.ui.theme.superficie
 import java.util.Locale
 
 // =============================================================================
@@ -113,7 +116,7 @@ fun BotaoPlay(
         color = cor,
         contentColor = corIcone,
         interactionSource = interacao,
-        modifier = modifier.size(tamanho).scale(escala),
+        modifier = modifier.size(tamanho).scale(escala).realce(acabamento, CircleShape),
     ) {
         Box(contentAlignment = Alignment.Center) {
             if (carregando) {
@@ -388,12 +391,18 @@ fun BotaoPilula(
     preenchido: Boolean = true,
 ) {
     val cores = LocalCoresSongV.current
+    val a = acabamento
     Surface(
         onClick = onClick,
         shape = CircleShape,
-        color = if (preenchido) cores.sinal else MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = if (preenchido) cores.sinal else Color.Transparent,
         contentColor = if (preenchido) cores.noSinal else MaterialTheme.colorScheme.onSurface,
-        modifier = modifier.heightIn(min = 44.dp),
+        modifier = modifier
+            .heightIn(min = 44.dp)
+            .then(
+                if (preenchido) Modifier.realce(a, CircleShape)
+                else Modifier.superficie(a, CircleShape, MaterialTheme.colorScheme.surfaceContainerHigh),
+            ),
     ) {
         Row(Modifier.padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             if (icone != null) {

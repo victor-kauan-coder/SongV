@@ -2,6 +2,17 @@
 
 Todas as mudanças relevantes do SongV. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
+## [2.1.0] — 2026-09-27
+
+### Novidades
+- **Cor do fundo**: Grafite, Preto, Noite, Floresta, Vinho, Terra (Papel, Branco, Névoa, Sálvia, Rosé e Areia no tema claro) ou qualquer cor, sempre ajustada para o texto continuar legível. Os tons das superfícies acompanham o fundo.
+- **Estilo do app**: Atual, **Opaco** (cores chapadas), **Fosco** (acrílico jateado), **Metálico** (alumínio escovado) e **Vidro** (painéis translúcidos). No Vidro e no Fosco, o conteúdo que passa por trás do mini player e da barra de abas é desfocado (Android 12L+; antes disso, um véu translúcido).
+- **Logo no app**: o V-colcheia aparece ao lado do nome, na cor de destaque escolhida.
+- **Trocar a capa** de uma faixa (menu da faixa) ou do álbum inteiro (tela do álbum) por uma imagem da galeria, com **Voltar à capa original**. A imagem é endireitada, recortada em quadrado e guardada uma vez só, mesmo para o álbum todo; notificação e tela de bloqueio mostram a capa nova na hora.
+
+### Correções
+- Na grade "Tocadas recentemente", as capas podiam aparecer trocadas depois que a ordem mudava.
+
 ## [2.0.1] — 2026-09-27
 
 ### Correções
@@ -77,5 +88,6 @@ Reformulação completa: nova identidade visual, nova navegação, letras tratad
 
 Primeira versão: biblioteca da pasta Music, player com letra `SYLT`/`USLT`, favoritos, playlists, fila e temas de cor.
 
+[2.1.0]: https://github.com/victor-kauan-coder/SongV/releases/tag/v2.1.0
 [2.0.1]: https://github.com/victor-kauan-coder/SongV/releases/tag/v2.0.1
 [2.0.0]: https://github.com/victor-kauan-coder/SongV/releases/tag/v2.0.0

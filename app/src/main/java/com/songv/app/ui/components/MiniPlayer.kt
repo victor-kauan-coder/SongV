@@ -30,12 +30,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.songv.app.model.Musica
 import com.songv.app.player.Progresso
 import com.songv.app.ui.theme.LocalCoresSongV
+import com.songv.app.ui.theme.acabamento
+import com.songv.app.ui.theme.sombra
+import com.songv.app.ui.theme.superficie
+import androidx.compose.ui.graphics.Color
 import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.runtime.collectAsState
 
@@ -49,16 +54,23 @@ fun MiniPlayer(
     onProxima: () -> Unit,
     onAnterior: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Aplicado exatamente sobre o cartão (depois da margem): é onde entra o desfoque do vidro. */
+    fundo: Modifier = Modifier,
 ) {
     val sinal = LocalCoresSongV.current.sinal
+    val a = acabamento
+    val forma = MaterialTheme.shapes.medium
     Surface(
-        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = MaterialTheme.shapes.medium,
-        shadowElevation = 6.dp,
+        shape = forma,
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp),
+            .padding(horizontal = 8.dp)
+            // A sombra vem antes da superfície: se ficasse no Surface, seria desenhada por cima dela.
+            .shadow(a.sombra(6.dp), forma)
+            .then(fundo)
+            .superficie(a, forma, MaterialTheme.colorScheme.surfaceContainerHigh, sobreConteudo = true),
     ) {
         Column {
             Row(

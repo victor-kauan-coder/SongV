@@ -53,6 +53,9 @@ class Navegador {
     /** Faixas aguardando o usuário escolher em qual playlist entram. */
     var paraPlaylist by mutableStateOf<List<Musica>?>(null)
 
+    /** Faixas que vão receber a imagem escolhida no seletor de fotos. */
+    var trocarCapa by mutableStateOf<List<Musica>?>(null)
+
     /** true quando a última navegação foi para frente — decide o sentido da animação. */
     var avancou = true
         private set

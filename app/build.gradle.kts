@@ -20,8 +20,8 @@ android {
         applicationId = "com.songv.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 3
-        versionName = "2.0.1"
+        versionCode = 4
+        versionName = "2.1.0"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -80,6 +80,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.4")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.4")
     implementation("androidx.palette:palette-ktx:1.0.0")
+    // Desfoque do que passa por trás da barra de abas e do mini player (estilos Vidro e Fosco).
+    // 0.7.x é a linha feita para o Compose 1.6.
+    implementation("dev.chrisbanes.haze:haze:0.7.3")
 
     implementation(platform("androidx.compose:compose-bom:2024.06.00"))
     implementation("androidx.compose.ui:ui")

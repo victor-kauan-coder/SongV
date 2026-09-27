@@ -23,11 +23,12 @@ O código é a fonte da verdade: as cores vivem em [`ui/theme/Cores.kt`](app/src
 | Frente adaptativa | `drawable/ic_launcher_foreground.xml` | V-colcheia grafite com contorno laranja |
 | Monocromático (Android 13+) | `drawable/ic_launcher_monochrome.xml` | só a silhueta do V-colcheia |
 | Notificação | `drawable/ic_stat_songv.xml` | silhueta branca 24 dp |
-| Splash / permissão | `drawable/ic_splash.xml` | marca completa recortada em círculo |
+| Splash | `drawable/ic_splash.xml` | marca completa recortada em círculo |
+| Logo dentro do app | `drawable/logo_songv.xml` | só o V-colcheia, branco, tingido na cor de destaque (`LogoSongV`) |
 
 A geometria cabe na zona segura de 66 dp dos ícones adaptativos; a pauta ocupa o fundo inteiro, então ela desliza por baixo do V nas animações de ícone do launcher.
 
-**Marca em texto:** "Song**V**" em Archivo Expandida Black, com o V em laranja-sinal (`MarcaSongV` em `InicioScreen.kt`).
+**Marca em texto:** V-colcheia + "Song**V**" em Archivo Expandida Black, os dois V na cor de destaque escolhida (`MarcaSongV` em `InicioScreen.kt`). Dentro do app a logo nunca leva o quadrado laranja do ícone: ela é tinta, não etiqueta.
 
 ---
 
@@ -53,6 +54,7 @@ Estratégia **contida**: neutros quentes + um acento. O laranja aparece pouco e 
 - **O player é um palco.** Em qualquer tema ele é escuro; a cor dominante da capa é escurecida (`tomDePalco`) até o texto branco sempre ter contraste, e desce em gradiente até o `Palco`.
 - **Destaques alternativos** (Âmbar, Vermelho, Rosa, Violeta, Azul, Verde, Sua cor) trocam só o sinal; os neutros quentes continuam.
 - Legendas de tradução usam o sinal misturado 42% com branco — ligadas à marca, mas sem competir com a linha original.
+- **Fundo escolhível.** Grafite, Preto, Noite, Floresta, Vinho, Terra (e as versões claras Papel, Branco, Névoa, Sálvia, Rosé, Areia) ou uma cor livre, que `ajustarFundo()` leva até luminância ≤ 0,025 no escuro ou ≥ 0,82 no claro. A escada de superfícies (`surfaceContainer*`, `outline*`) é derivada do fundo por `lerp` em direção à cor do texto, então Grafite reproduz os tons originais e qualquer outro fundo mantém os mesmos degraus.
 
 ---
 
@@ -78,6 +80,17 @@ Uma família, três larguras: **Archivo** (SIL OFL 1.1), com instâncias estáti
 
 - **Cantos contidos, de equipamento:** 4 / 6 / 10 / 16 / 24 dp. Capas pequenas com 6 dp, capas grandes com 10 dp. Pílulas só para ações e filtros.
 - **Profundidade tonal** (camadas de grafite), sombra só onde há objeto físico: a capa no player e o mini player.
+- **Acabamentos** (`ui/theme/Acabamento.kt`): a mesma cor de superfície "fabricada" de cinco jeitos, aplicados no mini player, barra de abas, cartões, botões secundários e folhas:
+
+  | Estilo | Superfície | Fundo das telas | Botões cheios |
+  |---|---|---|---|
+  | Atual | cor lisa | liso | — |
+  | Opaco | cor chapada puxada 10% para o destaque, sem sombra | liso | — |
+  | Fosco | translúcida, clareada, grão, borda clara de 1 dp | três luzes difusas (destaque e dois vizinhos de matiz) | grão |
+  | Metálico | degradê vertical + riscos escovados + bisel claro/escuro | degradê vertical + escovado | brilho anodizado |
+  | Vidro | 30–45% de opacidade, reflexo diagonal, aresta brilhante | luzes difusas mais fortes | verniz na metade de cima |
+
+  No Vidro e no Fosco, o que rola por trás do mini player e da barra de abas é desfocado com Haze (Android 12L+; antes disso, véu mais denso). A sombra some nos estilos translúcidos e no Opaco — sob vidro ela aparece através e suja o painel. Texturas (grão e escovado) são dois bitmaps de 128 px gerados uma vez; nada de imagem no APK.
 - **Movimento com propósito:** navegação em eixo horizontal (entrar/voltar), player e fila sobem de baixo, a letra rola com `FastOutSlowIn` de ~520 ms, o botão de play afunda com mola ao ser tocado. Nada de animação decorativa em loop, exceto o indicador de "tocando agora" — que é estado.
 
 ---

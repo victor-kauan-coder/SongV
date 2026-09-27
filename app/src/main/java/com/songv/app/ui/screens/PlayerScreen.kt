@@ -148,7 +148,8 @@ fun PlayerScreen(vm: PlayerViewModel, nav: Navegador, modifier: Modifier = Modif
     val equalizador = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {}
 
     val capas = LocalCapas.current
-    val corCapa by produceState<Color?>(null, musica?.id, prefs.coresDaCapa) {
+    val capaPropria = com.songv.app.ui.components.LocalCapasProprias.current[musica?.id]
+    val corCapa by produceState<Color?>(null, musica?.id, prefs.coresDaCapa, capaPropria) {
         value = if (prefs.coresDaCapa && musica != null) capas.corDominante(musica)?.let { Color(it) } else null
     }
     val sinal = LocalCoresSongV.current

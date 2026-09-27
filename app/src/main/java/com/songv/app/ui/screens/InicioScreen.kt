@@ -40,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -63,6 +64,9 @@ import com.songv.app.ui.components.IndicadorTocando
 import com.songv.app.ui.components.plural
 import com.songv.app.ui.theme.EstilosSongV
 import com.songv.app.ui.theme.LocalCoresSongV
+import com.songv.app.ui.theme.acabamento
+import com.songv.app.ui.theme.realce
+import com.songv.app.ui.theme.superficie
 
 @Composable
 fun InicioScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: PaddingValues) {
@@ -221,17 +225,33 @@ fun InicioScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: PaddingVal
     }
 }
 
-/** "SongV" em Archivo Expandida, com o V na cor de sinal. */
+/** O V-colcheia do logo e "SongV" em Archivo Expandida, os dois na cor de destaque escolhida. */
 @Composable
-fun MarcaSongV(modifier: Modifier = Modifier) {
+fun MarcaSongV(modifier: Modifier = Modifier, logo: Boolean = true) {
     val sinal = LocalCoresSongV.current.sinal
-    Text(
-        buildAnnotatedString {
-            append("Song")
-            withStyle(SpanStyle(color = sinal)) { append("V") }
-        },
-        style = EstilosSongV.marca,
-        color = MaterialTheme.colorScheme.onBackground,
+    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
+        if (logo) {
+            LogoSongV(Modifier.size(30.dp))
+            Spacer(Modifier.width(8.dp))
+        }
+        Text(
+            buildAnnotatedString {
+                append("Song")
+                withStyle(SpanStyle(color = sinal)) { append("V") }
+            },
+            style = EstilosSongV.marca,
+            color = MaterialTheme.colorScheme.onBackground,
+        )
+    }
+}
+
+/** Só o V-colcheia, sem o fundo do ícone, tingido com a cor de destaque. */
+@Composable
+fun LogoSongV(modifier: Modifier = Modifier) {
+    Icon(
+        androidx.compose.ui.res.painterResource(com.songv.app.R.drawable.logo_songv),
+        contentDescription = null,
+        tint = LocalCoresSongV.current.sinal,
         modifier = modifier,
     )
 }
@@ -260,11 +280,13 @@ private fun CarregandoBiblioteca(lidas: Int, total: Int) {
 @Composable
 private fun Atalho(icone: ImageVector, texto: String, destaque: Boolean = false, onClick: () -> Unit) {
     val cores = LocalCoresSongV.current
+    val a = acabamento
     Surface(
         onClick = onClick,
         shape = CircleShape,
-        color = if (destaque) cores.sinal else MaterialTheme.colorScheme.surfaceContainerHigh,
+        color = if (destaque) cores.sinal else Color.Transparent,
         contentColor = if (destaque) cores.noSinal else MaterialTheme.colorScheme.onSurface,
+        modifier = if (destaque) Modifier.realce(a, CircleShape) else Modifier.superficie(a, CircleShape, MaterialTheme.colorScheme.surfaceContainerHigh),
     ) {
         Row(Modifier.padding(start = 14.dp, end = 16.dp, top = 10.dp, bottom = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icone, contentDescription = null, modifier = Modifier.size(18.dp))
@@ -277,11 +299,12 @@ private fun Atalho(icone: ImageVector, texto: String, destaque: Boolean = false,
 /** Atalho compacto (capa + título) da grade "Tocadas recentemente". */
 @Composable
 private fun AtalhoFaixa(musica: Musica, ativa: Boolean, tocando: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    val forma = MaterialTheme.shapes.small
     Surface(
         onClick = onClick,
-        shape = MaterialTheme.shapes.small,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = modifier.height(56.dp),
+        shape = forma,
+        color = Color.Transparent,
+        modifier = modifier.height(56.dp).superficie(acabamento, forma, MaterialTheme.colorScheme.surfaceContainer),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CapaArte(musica, Modifier.size(56.dp), forma = androidx.compose.ui.graphics.RectangleShape)

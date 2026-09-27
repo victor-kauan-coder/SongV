@@ -36,6 +36,26 @@ enum class Destaque(val rotulo: String, val argb: Long) {
     PERSONALIZADO("Sua cor", 0xFFFF6B1A),
 }
 
+/** Acabamento das superfícies (mini player, barra de abas, cartões e botões). */
+enum class EstiloVisual(val rotulo: String, val descricao: String) {
+    ATUAL("Atual", "Liso"),
+    OPACO("Opaco", "Chapado"),
+    FOSCO("Fosco", "Jateado"),
+    METALICO("Metálico", "Escovado"),
+    VIDRO("Vidro", "Translúcido"),
+}
+
+/** Cor de fundo do app, com uma versão para o tema escuro e outra para o claro. */
+enum class FundoTema(val rotulo: String, val rotuloClaro: String, val escuro: Long, val claro: Long) {
+    GRAFITE("Grafite", "Papel", 0xFF141211, 0xFFF4F1EE),
+    PRETO("Preto", "Branco", 0xFF000000, 0xFFFFFFFF),
+    NOITE("Noite", "Névoa", 0xFF0E121C, 0xFFEEF1F6),
+    FLORESTA("Floresta", "Sálvia", 0xFF0E1511, 0xFFEEF2EC),
+    VINHO("Vinho", "Rosé", 0xFF1A0D11, 0xFFF6EDEF),
+    TERRA("Terra", "Areia", 0xFF19130D, 0xFFF5EFE6),
+    PERSONALIZADO("Sua cor", "Sua cor", 0xFF141211, 0xFFF4F1EE),
+}
+
 enum class ExibicaoTraducao(val rotulo: String) { AMBAS("Original + tradução"), SO_TRADUCAO("Só a tradução") }
 
 enum class Ordenacao(val rotulo: String) {
@@ -48,6 +68,9 @@ data class Preferencias(
     val destaque: Destaque = Destaque.LARANJA,
     val corPersonalizada: Int? = null,
     val coresDaCapa: Boolean = true,
+    val estilo: EstiloVisual = EstiloVisual.ATUAL,
+    val fundo: FundoTema = FundoTema.GRAFITE,
+    val corFundoPersonalizada: Int? = null,
     val favoritos: Set<String> = emptySet(),
     val playlists: List<Playlist> = emptyList(),
     val historico: List<String> = emptyList(),
@@ -88,6 +111,9 @@ class PreferenciasRepository(private val context: Context) {
         val DESTAQUE = stringPreferencesKey("destaque")
         val COR_CUSTOM = intPreferencesKey("cor_personalizada")
         val CORES_CAPA = booleanPreferencesKey("cores_da_capa")
+        val ESTILO = stringPreferencesKey("estilo_visual")
+        val FUNDO = stringPreferencesKey("fundo")
+        val COR_FUNDO = intPreferencesKey("cor_fundo_personalizada")
         val FAVORITOS = stringSetPreferencesKey("musicas_favoritas")
         val PLAYLISTS = stringPreferencesKey("playlists_json")
         val PLAYLISTS_ANTIGAS = stringSetPreferencesKey("playlists_serializadas")
@@ -115,6 +141,9 @@ class PreferenciasRepository(private val context: Context) {
             destaque = p[K.DESTAQUE]?.let { enumOu(it, Destaque.LARANJA) } ?: Destaque.LARANJA,
             corPersonalizada = p[K.COR_CUSTOM],
             coresDaCapa = p[K.CORES_CAPA] ?: true,
+            estilo = p[K.ESTILO]?.let { enumOu(it, EstiloVisual.ATUAL) } ?: EstiloVisual.ATUAL,
+            fundo = p[K.FUNDO]?.let { enumOu(it, FundoTema.GRAFITE) } ?: FundoTema.GRAFITE,
+            corFundoPersonalizada = p[K.COR_FUNDO],
             favoritos = p[K.FAVORITOS] ?: emptySet(),
             playlists = p[K.PLAYLISTS]?.let(::lerPlaylists) ?: p[K.PLAYLISTS_ANTIGAS]?.let(::migrarPlaylistsAntigas).orEmpty(),
             historico = p[K.HISTORICO]?.let(::lerLista).orEmpty(),
@@ -142,6 +171,12 @@ class PreferenciasRepository(private val context: Context) {
         it[K.DESTAQUE] = Destaque.PERSONALIZADO.name
     }
     suspend fun definirCoresDaCapa(v: Boolean) = editar { it[K.CORES_CAPA] = v }
+    suspend fun definirEstilo(e: EstiloVisual) = editar { it[K.ESTILO] = e.name }
+    suspend fun definirFundo(f: FundoTema) = editar { it[K.FUNDO] = f.name }
+    suspend fun definirCorFundoPersonalizada(argb: Int) = editar {
+        it[K.COR_FUNDO] = argb
+        it[K.FUNDO] = FundoTema.PERSONALIZADO.name
+    }
 
     // ---- Biblioteca ----
 

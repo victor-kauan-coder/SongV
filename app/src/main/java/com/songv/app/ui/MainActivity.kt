@@ -13,6 +13,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedContent
@@ -63,6 +64,8 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
@@ -76,6 +79,7 @@ import com.songv.app.player.PlayerViewModel
 import com.songv.app.ui.components.EscolherPlaylistSheet
 import com.songv.app.ui.components.LocalBiblioteca
 import com.songv.app.ui.components.LocalCapas
+import com.songv.app.ui.components.LocalCapasProprias
 import com.songv.app.ui.components.MenuMusicaSheet
 import com.songv.app.ui.components.MiniPlayer
 import com.songv.app.ui.screens.AlbumScreen
@@ -91,6 +95,13 @@ import com.songv.app.ui.screens.PlayerScreen
 import com.songv.app.ui.screens.PlaylistScreen
 import com.songv.app.ui.theme.LocalCoresSongV
 import com.songv.app.ui.theme.SongVTheme
+import com.songv.app.ui.theme.acabamento
+import com.songv.app.ui.theme.estiloDesfoque
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.haze
+import dev.chrisbanes.haze.hazeChild
+import com.songv.app.ui.theme.fundoDoApp
+import com.songv.app.ui.theme.superficie
 import com.songv.app.ui.theme.corDoDestaque
 
 class MainActivity : ComponentActivity() {
@@ -145,7 +156,13 @@ private fun App(vm: PlayerViewModel, pedidoAbrirPlayer: MutableState<Boolean>) {
         }
     }
 
-    SongVTheme(modo = prefs.modoTema, destaque = corDoDestaque(prefs.destaque, prefs.corPersonalizada)) {
+    SongVTheme(
+        modo = prefs.modoTema,
+        destaque = corDoDestaque(prefs.destaque, prefs.corPersonalizada),
+        fundo = prefs.fundo,
+        corFundo = prefs.corFundoPersonalizada,
+        estilo = prefs.estilo,
+    ) {
         // Ícones da barra de status claros sobre o player (sempre escuro) e conforme o tema no resto.
         val escuro = LocalCoresSongV.current.escuro || nav.playerAberto || nav.filaAberta
         LaunchedEffect(escuro) {
@@ -186,7 +203,7 @@ private fun App(vm: PlayerViewModel, pedidoAbrirPlayer: MutableState<Boolean>) {
         }
 
         // Surface (e não Box) para o texto herdar onBackground — fora dele a cor padrão é preta.
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        Surface(Modifier.fillMaxSize().fundoDoApp(acabamento), color = Color.Transparent, contentColor = MaterialTheme.colorScheme.onBackground) {
             if (!concedida) {
                 PermissaoScreen(
                     negadaDeVez = negadaDeVez,
@@ -199,8 +216,11 @@ private fun App(vm: PlayerViewModel, pedidoAbrirPlayer: MutableState<Boolean>) {
                 )
             } else {
                 val bib by vm.biblioteca.collectAsState()
+                val capas = (contexto.applicationContext as SongVApp).capas
+                val capasProprias by capas.personalizadas.collectAsState()
                 CompositionLocalProvider(
-                    LocalCapas provides (contexto.applicationContext as SongVApp).capas,
+                    LocalCapas provides capas,
+                    LocalCapasProprias provides capasProprias,
                     LocalBiblioteca provides bib.porId,
                 ) {
                     Casca(vm, nav)
@@ -221,6 +241,21 @@ private fun Casca(vm: PlayerViewModel, nav: Navegador) {
     val avisos = remember { SnackbarHostState() }
     val estados = rememberSaveableStateHolder()
     var margemInferior by remember { mutableStateOf(PaddingValues(0.dp)) }
+    val acab = acabamento
+    val vidro = remember { HazeState() }
+    val desfoque = acab.estiloDesfoque(MaterialTheme.colorScheme.surfaceContainerLow)
+    val capasProprias = LocalCapasProprias.current
+
+    val escolherImagem = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        val alvo = nav.trocarCapa
+        nav.trocarCapa = null
+        if (uri != null && alvo != null) vm.definirCapa(alvo, uri)
+    }
+    LaunchedEffect(nav.trocarCapa) {
+        if (nav.trocarCapa != null) {
+            escolherImagem.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        }
+    }
 
     LaunchedEffect(Unit) {
         vm.mensagens.collect { m ->
@@ -234,7 +269,7 @@ private fun Casca(vm: PlayerViewModel, nav: Navegador) {
     ) { nav.voltar() }
 
     Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+        containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0),
         bottomBar = {
             Column {
@@ -250,10 +285,17 @@ private fun Casca(vm: PlayerViewModel, nav: Navegador) {
                             onProxima = vm::proxima,
                             onAnterior = vm::anterior,
                             modifier = Modifier.padding(bottom = 6.dp),
+                            fundo = if (acab.translucido) Modifier.hazeChild(vidro, MaterialTheme.shapes.medium) else Modifier,
                         )
                     }
                 }
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow, tonalElevation = 0.dp) {
+                NavigationBar(
+                    containerColor = Color.Transparent,
+                    tonalElevation = 0.dp,
+                    modifier = Modifier
+                        .then(if (acab.translucido) Modifier.hazeChild(vidro) else Modifier)
+                        .superficie(acab, RectangleShape, MaterialTheme.colorScheme.surfaceContainerLow, sobreConteudo = true),
+                ) {
                     Aba.entries.forEach { aba ->
                         val ativa = nav.aba == aba
                         NavigationBarItem(
@@ -276,6 +318,7 @@ private fun Casca(vm: PlayerViewModel, nav: Navegador) {
         val alvo: Any = nav.rotaAtual ?: nav.aba
         AnimatedContent(
             targetState = alvo,
+            modifier = Modifier.fillMaxSize().then(if (acab.translucido) Modifier.haze(vidro, desfoque) else Modifier),
             transitionSpec = {
                 if (initialState is Aba && targetState is Aba) {
                     fadeIn(tween(220, delayMillis = 60)) togetherWith fadeOut(tween(120))
@@ -351,6 +394,8 @@ private fun Casca(vm: PlayerViewModel, nav: Navegador) {
             onFavoritar = { vm.alternarFavorito(m.id) },
             onIrAlbum = album?.let { a -> { nav.abrir(Rota.Album(a.chave)) } },
             onIrArtista = { nav.abrir(Rota.Artista(m.artistas.first())) },
+            onTrocarCapa = { nav.trocarCapa = listOf(m) },
+            onRestaurarCapa = if (m.id in capasProprias) ({ vm.restaurarCapa(listOf(m)) }) else null,
         )
     }
     nav.paraPlaylist?.let { musicas ->

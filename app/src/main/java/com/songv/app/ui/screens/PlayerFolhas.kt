@@ -1,5 +1,7 @@
 package com.songv.app.ui.screens
 
+import com.songv.app.ui.theme.acabamento
+import com.songv.app.ui.theme.corDeFolha
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -86,7 +88,7 @@ private fun FolhaBase(titulo: String, onFechar: () -> Unit, conteudo: @Composabl
     ModalBottomSheet(
         onDismissRequest = onFechar,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        containerColor = acabamento.corDeFolha(MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(Modifier.navigationBarsPadding().verticalScroll(rememberScrollState()).padding(bottom = 16.dp)) {
             Text(titulo, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp).padding(bottom = 8.dp))
@@ -298,7 +300,7 @@ fun PesquisaLetraSheet(vm: PlayerViewModel, onFechar: () -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onFechar,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        containerColor = acabamento.corDeFolha(MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 8.dp)) {
             Text("Buscar letra", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp))

@@ -1,5 +1,16 @@
 package com.songv.app.ui.screens
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.ui.graphics.lerp
+import com.songv.app.data.EstiloVisual
+import com.songv.app.data.FundoTema
+import com.songv.app.ui.theme.acabamento
+import com.songv.app.ui.theme.ajustarFundo
+import com.songv.app.ui.theme.corDoFundo
+import com.songv.app.ui.theme.fundoDoApp
+import com.songv.app.ui.theme.realce
+import com.songv.app.ui.theme.superficie
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -96,6 +107,7 @@ fun ConfiguracoesScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: Pad
     val contexto = LocalContext.current
     val pastas by produceState(emptyList<Pair<String, Int>>(), bib.musicas.size) { value = vm.pastasDisponiveis() }
     var seletorCor by rememberSaveable { mutableStateOf(false) }
+    var seletorFundo by rememberSaveable { mutableStateOf(false) }
     val cores = LocalCoresSongV.current
     fun abrir(url: String) = runCatching { contexto.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
 
@@ -119,6 +131,50 @@ fun ConfiguracoesScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: Pad
                         label = { Text(m.rotulo) },
                         shape = CircleShape,
                         colors = FilterChipDefaults.filterChipColors(selectedContainerColor = cores.sinal, selectedLabelColor = cores.noSinal),
+                    )
+                }
+            }
+        }
+        item {
+            Text("Estilo", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp))
+            Text(
+                "O acabamento do mini player, da barra de abas, dos cartões e dos botões.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
+            Row(
+                Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                EstiloVisual.entries.forEach { e ->
+                    AmostraEstilo(e, selecionado = prefs.estilo == e) { vm.definirEstilo(e) }
+                }
+            }
+        }
+        item {
+            val escuro = cores.escuro
+            Text("Cor do fundo", style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 12.dp))
+            Text(
+                if (escuro) "Tons escuros; as superfícies acompanham a cor escolhida." else "Tons claros; as superfícies acompanham a cor escolhida.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 20.dp),
+            )
+            FlowRow(
+                Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                FundoTema.entries.forEach { f ->
+                    val cor = corDoFundo(f, prefs.corFundoPersonalizada, escuro)
+                    AmostraCor(
+                        cor = cor,
+                        rotulo = if (escuro) f.rotulo else f.rotuloClaro,
+                        selecionada = prefs.fundo == f,
+                        personalizada = f == FundoTema.PERSONALIZADO && prefs.corFundoPersonalizada == null,
+                        contorno = lerp(cor, MaterialTheme.colorScheme.onSurface, 0.3f),
+                        onClick = { if (f == FundoTema.PERSONALIZADO) seletorFundo = true else vm.definirFundo(f) },
                     )
                 }
             }
@@ -260,7 +316,7 @@ fun ConfiguracoesScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: Pad
         }
         item {
             Text(
-                "Letras online: LRCLIB · Tradução: Google Tradutor · Fonte: Archivo (SIL Open Font License 1.1)",
+                "Letras online: LRCLIB · Tradução: Google Tradutor · Fonte: Archivo (SIL Open Font License 1.1) · Desfoque: Haze (Apache 2.0)",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
@@ -274,6 +330,17 @@ fun ConfiguracoesScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: Pad
             inicial = corDoDestaque(Destaque.PERSONALIZADO, prefs.corPersonalizada),
             onAplicar = { vm.definirCorPersonalizada(it.toArgb()); seletorCor = false },
             onFechar = { seletorCor = false },
+        )
+    }
+    if (seletorFundo) {
+        val escuro = cores.escuro
+        SeletorCorDialog(
+            inicial = prefs.corFundoPersonalizada?.let { Color(it) } ?: Color(0xFF3A2A6B),
+            titulo = "Cor do fundo",
+            rotuloPrevia = if (escuro) "Como fica no tema escuro" else "Como fica no tema claro",
+            previa = { ajustarFundo(it, escuro) },
+            onAplicar = { vm.definirCorFundoPersonalizada(it.toArgb()); seletorFundo = false },
+            onFechar = { seletorFundo = false },
         )
     }
 }
@@ -337,7 +404,14 @@ private fun OpcaoPasta(nome: String, quantidade: Int, selecionada: Boolean, onCl
 }
 
 @Composable
-private fun AmostraCor(cor: Color, rotulo: String, selecionada: Boolean, personalizada: Boolean, onClick: () -> Unit) {
+private fun AmostraCor(
+    cor: Color,
+    rotulo: String,
+    selecionada: Boolean,
+    personalizada: Boolean,
+    onClick: () -> Unit,
+    contorno: Color = Color.Transparent,
+) {
     Column(
         Modifier.width(76.dp).clip(MaterialTheme.shapes.medium).clickable(onClick = onClick).padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -347,6 +421,7 @@ private fun AmostraCor(cor: Color, rotulo: String, selecionada: Boolean, persona
                 .size(44.dp)
                 .border(2.dp, if (selecionada) MaterialTheme.colorScheme.onSurface else Color.Transparent, CircleShape)
                 .padding(4.dp)
+                .border(1.dp, contorno, CircleShape)
                 .background(
                     if (personalizada && !selecionada) Brush.sweepGradient(listOf(Color.Red, Color.Yellow, Color.Green, Color.Cyan, Color.Blue, Color.Magenta, Color.Red))
                     else Brush.linearGradient(listOf(cor, cor)),
@@ -365,7 +440,14 @@ private fun Color.luminanceSimples() = 0.2126f * red + 0.7152f * green + 0.0722f
 
 /** Seletor HSV: quadrado de saturação/brilho + faixa de matiz. */
 @Composable
-private fun SeletorCorDialog(inicial: Color, onAplicar: (Color) -> Unit, onFechar: () -> Unit) {
+private fun SeletorCorDialog(
+    inicial: Color,
+    onAplicar: (Color) -> Unit,
+    onFechar: () -> Unit,
+    titulo: String = "Sua cor",
+    rotuloPrevia: String = "Prévia do destaque",
+    previa: (Color) -> Color = { it },
+) {
     val hsv = remember(inicial) { FloatArray(3).also { android.graphics.Color.colorToHSV(inicial.toArgb(), it) } }
     var matiz by remember { mutableFloatStateOf(hsv[0]) }
     var saturacao by remember { mutableFloatStateOf(hsv[1].coerceAtLeast(0.3f)) }
@@ -376,7 +458,7 @@ private fun SeletorCorDialog(inicial: Color, onAplicar: (Color) -> Unit, onFecha
 
     AlertDialog(
         onDismissRequest = onFechar,
-        title = { Text("Sua cor") },
+        title = { Text(titulo) },
         text = {
             Column {
                 var tamanho by remember { mutableStateOf(IntSize.Zero) }
@@ -432,13 +514,72 @@ private fun SeletorCorDialog(inicial: Color, onAplicar: (Color) -> Unit, onFecha
                 }
                 Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(36.dp).background(cor, CircleShape))
+                    Box(Modifier.size(36.dp).border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape).background(previa(cor), CircleShape))
                     Spacer(Modifier.width(12.dp))
-                    Text("Prévia do destaque", style = MaterialTheme.typography.bodyMedium)
+                    Text(rotuloPrevia, style = MaterialTheme.typography.bodyMedium)
                 }
             }
         },
         confirmButton = { TextButton(onClick = { onAplicar(cor) }) { Text("Aplicar") } },
         dismissButton = { TextButton(onClick = onFechar) { Text("Cancelar") } },
     )
+}
+
+/** Miniatura do estilo: o fundo, um cartão e o botão de play desenhados com o próprio acabamento. */
+@Composable
+private fun AmostraEstilo(estilo: EstiloVisual, selecionado: Boolean, onClick: () -> Unit) {
+    val atual = acabamento
+    val a = remember(estilo, atual) { atual.copy(estilo = estilo) }
+    val formaCartao = MaterialTheme.shapes.small
+    Column(
+        Modifier.width(92.dp).clip(MaterialTheme.shapes.medium).clickable(onClickLabel = "Usar o estilo ${estilo.rotulo}", onClick = onClick).padding(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(
+            Modifier
+                .size(84.dp, 100.dp)
+                .border(2.dp, if (selecionado) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.medium)
+                .padding(3.dp)
+                .clip(MaterialTheme.shapes.small)
+                .fundoDoApp(a),
+        ) {
+            Box(
+                Modifier
+                    .align(Alignment.TopStart)
+                    .padding(8.dp)
+                    .size(46.dp, 14.dp)
+                    .superficie(a, formaCartao, MaterialTheme.colorScheme.surfaceContainer),
+            )
+            Row(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(6.dp)
+                    .fillMaxWidth()
+                    .height(30.dp)
+                    .superficie(a, formaCartao, MaterialTheme.colorScheme.surfaceContainerHigh, sobreConteudo = true)
+                    .padding(horizontal = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(16.dp).background(MaterialTheme.colorScheme.surfaceContainerHighest, MaterialTheme.shapes.extraSmall))
+                Spacer(Modifier.weight(1f))
+                Box(
+                    Modifier
+                        .size(18.dp)
+                        .background(LocalCoresSongV.current.sinal, CircleShape)
+                        .realce(a, CircleShape),
+                )
+            }
+            if (selecionado) {
+                Icon(
+                    Icons.Rounded.Check,
+                    contentDescription = "Selecionado",
+                    tint = LocalCoresSongV.current.noSinal,
+                    modifier = Modifier.align(Alignment.TopEnd).padding(6.dp).size(18.dp).background(LocalCoresSongV.current.sinal, CircleShape).padding(2.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(estilo.rotulo, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+        Text(estilo.descricao, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+    }
 }

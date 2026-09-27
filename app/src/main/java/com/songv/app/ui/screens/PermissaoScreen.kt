@@ -1,6 +1,5 @@
 package com.songv.app.ui.screens
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
@@ -18,9 +17,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import com.songv.app.R
 import com.songv.app.ui.components.BotaoPilula
 
 /**
@@ -35,9 +32,9 @@ fun PermissaoScreen(negadaDeVez: Boolean, onPermitir: () -> Unit, onAbrirConfigu
         horizontalAlignment = Alignment.Start,
         verticalArrangement = Arrangement.Center,
     ) {
-        Image(painterResource(R.drawable.ic_splash), contentDescription = null, modifier = Modifier.size(96.dp))
+        LogoSongV(Modifier.size(88.dp))
         Spacer(Modifier.height(24.dp))
-        MarcaSongV()
+        MarcaSongV(logo = false)
         Spacer(Modifier.height(16.dp))
         Text("Suas músicas, suas letras.", style = MaterialTheme.typography.headlineMedium)
         Spacer(Modifier.height(12.dp))

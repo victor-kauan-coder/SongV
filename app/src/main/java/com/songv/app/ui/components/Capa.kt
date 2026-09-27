@@ -19,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -45,14 +46,21 @@ import kotlin.math.abs
 
 val LocalCapas = staticCompositionLocalOf<CapaRepository> { error("CapaRepository não fornecido") }
 
+/** Capas escolhidas à mão (id → arquivo). Quem lê recompõe quando o usuário troca uma capa. */
+val LocalCapasProprias = compositionLocalOf<Map<String, String>> { emptyMap() }
+
 /** Bitmap da capa, carregado fora da main thread. Para a versão grande, começa pela miniatura já em memória. */
 @Composable
 fun rememberCapa(musica: Musica?, grande: Boolean = false): ImageBitmap? {
     val repo = LocalCapas.current
-    val inicial = remember(musica?.id, musica?.modificadoSeg, grande) {
+    val propria = LocalCapasProprias.current[musica?.id]
+    val inicial = remember(musica?.id, musica?.modificadoSeg, grande, propria) {
         musica?.let { (repo.emMemoria(it, grande) ?: if (grande) repo.emMemoria(it, false) else null)?.asImageBitmap() }
     }
-    val bitmap by produceState(inicial, musica?.id, musica?.modificadoSeg, grande) {
+    val bitmap by produceState(inicial, musica?.id, musica?.modificadoSeg, grande, propria) {
+        // O estado sobrevive à troca de faixa (item reaproveitado numa lista que reordenou):
+        // sem isto, a capa da faixa anterior ficava no lugar da nova.
+        value = inicial
         if (musica != null && (value == null || grande)) {
             repo.carregar(musica, grande)?.let { value = it.asImageBitmap() }
         }
@@ -142,8 +150,9 @@ fun CapaGerada(semente: String, rotulo: String, modifier: Modifier = Modifier) {
 /** Capa de playlist: mosaico 2×2 com capas de álbuns diferentes, ou uma capa só quando não há variedade. */
 @Composable
 fun MosaicoCapas(musicas: List<Musica>, nome: String, modifier: Modifier = Modifier, forma: Shape = MaterialTheme.shapes.small) {
-    val distintas = remember(musicas) {
-        musicas.filter { it.temCapa }.distinctBy { it.album.ifBlank { it.id } }.take(4)
+    val proprias = LocalCapasProprias.current
+    val distintas = remember(musicas, proprias) {
+        musicas.filter { it.temCapa || it.id in proprias }.distinctBy { it.album.ifBlank { it.id } }.take(4)
     }
     Box(modifier.clip(forma).aspectRatio(1f)) {
         when {

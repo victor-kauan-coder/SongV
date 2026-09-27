@@ -19,6 +19,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder
 import com.songv.app.SongVApp
 import com.songv.app.data.Destaque
+import com.songv.app.data.EstiloVisual
+import com.songv.app.data.FundoTema
 import com.songv.app.data.ExibicaoTraducao
 import com.songv.app.data.ModoTema
 import com.songv.app.data.Ordenacao
@@ -669,6 +671,37 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun definirDestaque(d: Destaque) = viewModelScope.launch { prefs.definirDestaque(d) }
     fun definirCorPersonalizada(argb: Int) = viewModelScope.launch { prefs.definirCorPersonalizada(argb) }
     fun definirCoresDaCapa(v: Boolean) = viewModelScope.launch { prefs.definirCoresDaCapa(v) }
+    fun definirEstilo(e: EstiloVisual) = viewModelScope.launch { prefs.definirEstilo(e) }
+    fun definirFundo(f: FundoTema) = viewModelScope.launch { prefs.definirFundo(f) }
+    fun definirCorFundoPersonalizada(argb: Int) = viewModelScope.launch { prefs.definirCorFundoPersonalizada(argb) }
+
+    // ---- Capas escolhidas à mão ----
+
+    fun definirCapa(musicas: List<Musica>, imagem: Uri) = viewModelScope.launch {
+        if (capas.definirPersonalizada(musicas.map { it.id }, imagem)) {
+            atualizarArtwork(musicas)
+            avisar(if (musicas.size == 1) "Capa alterada" else "Capa alterada em ${musicas.size} faixas")
+        } else {
+            avisar("Não consegui abrir essa imagem")
+        }
+    }
+
+    fun restaurarCapa(musicas: List<Musica>) = viewModelScope.launch {
+        capas.removerPersonalizada(musicas.map { it.id })
+        atualizarArtwork(musicas)
+        avisar("Capa original restaurada")
+    }
+
+    /** Troca a arte na notificação e na tela de bloqueio sem interromper a faixa. */
+    private fun atualizarArtwork(musicas: List<Musica>) {
+        val ids = musicas.mapTo(HashSet()) { it.id }
+        for (i in 0 until player.mediaItemCount) {
+            val item = player.getMediaItemAt(i)
+            val m = musicaDaChave(item.mediaId)?.takeIf { it.id in ids } ?: continue
+            val meta = item.mediaMetadata.buildUpon().setArtworkUri(capas.uriArtwork(m)).build()
+            player.replaceMediaItem(i, item.buildUpon().setMediaMetadata(meta).build())
+        }
+    }
     fun definirOrdenacao(o: Ordenacao) = viewModelScope.launch { prefs.definirOrdenacao(o) }
     fun definirExibicaoTraducao(e: ExibicaoTraducao) = viewModelScope.launch { prefs.definirExibicaoTraducao(e) }
     fun definirRomanizacao(v: Boolean) = viewModelScope.launch { prefs.definirRomanizacao(v) }

@@ -1,5 +1,7 @@
 package com.songv.app.ui.components
 
+import com.songv.app.ui.theme.acabamento
+import com.songv.app.ui.theme.corDeFolha
 import android.content.Intent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -16,6 +18,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AddPhotoAlternate
+import androidx.compose.material.icons.rounded.SettingsBackupRestore
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.AddToQueue
 import androidx.compose.material.icons.rounded.Favorite
@@ -86,13 +90,15 @@ fun MenuMusicaSheet(
     onFavoritar: () -> Unit,
     onIrAlbum: (() -> Unit)?,
     onIrArtista: () -> Unit,
+    onTrocarCapa: () -> Unit,
+    onRestaurarCapa: (() -> Unit)?,
 ) {
     val contexto = LocalContext.current
     var detalhes by remember { mutableStateOf(false) }
     ModalBottomSheet(
         onDismissRequest = onFechar,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        containerColor = acabamento.corDeFolha(MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(Modifier.navigationBarsPadding().padding(bottom = 12.dp)) {
             Row(Modifier.padding(horizontal = 24.dp).padding(bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -122,6 +128,8 @@ fun MenuMusicaSheet(
             )
             onIrAlbum?.let { ItemAcao(Icons.Rounded.Album, "Ir para o álbum", { it(); onFechar() }) }
             ItemAcao(Icons.Rounded.Person, "Ir para o artista", { onIrArtista(); onFechar() })
+            ItemAcao(Icons.Rounded.AddPhotoAlternate, "Trocar a capa", { onTrocarCapa(); onFechar() })
+            onRestaurarCapa?.let { ItemAcao(Icons.Rounded.SettingsBackupRestore, "Voltar à capa original", { it(); onFechar() }) }
             ItemAcao(Icons.Rounded.Share, "Compartilhar arquivo", {
                 val envio = Intent(Intent.ACTION_SEND).apply {
                     type = "audio/*"
@@ -185,7 +193,7 @@ fun EscolherPlaylistSheet(
     ModalBottomSheet(
         onDismissRequest = onFechar,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+        containerColor = acabamento.corDeFolha(MaterialTheme.colorScheme.surfaceContainerLow),
     ) {
         Column(Modifier.navigationBarsPadding()) {
             Text(

@@ -30,7 +30,7 @@
 - **Letra sincronizada** a partir do frame `SYLT`, de arquivos `.lrc` ao lado da música ou de LRC gravado dentro do `USLT`.
 - **Tradução linha a linha** em 16 idiomas, exibida abaixo do original (ou só a tradução), que continua ligada nas próximas faixas.
 - **Romanização** para letras em coreano, japonês, chinês, russo… (`밤의 도시` → *bam-ui dosi*).
-- **Buscar letra online** na [LRCLIB](https://lrclib.net) quando o arquivo não tem letra, ou **importar um `.lrc`** do aparelho.
+- **Buscar letra online** na [LRCLIB](https://lrclib.net) quando o arquivo não tem letra — tolerante a títulos do YouTube e versões com duração diferente —, **escolher outra versão** por título e artista ou **importar um `.lrc`** do aparelho.
 - **Ajuste de sincronia** por faixa (±0,25 s), tamanho do texto, toque numa linha para pular até ela, indicador animado nas introduções e trechos instrumentais.
 
 ### Capas do álbum
@@ -39,6 +39,7 @@
 - **Fundo do player tingido pela capa**, sempre com contraste para o texto.
 - Faixas sem capa ganham uma **capa gerada** com a cor do álbum, iniciais e sulcos de vinil.
 - Playlists com **mosaico 2×2** das capas dos álbuns.
+- **Troque a capa na mão**, de uma faixa ou do álbum inteiro, pela galeria. O arquivo de música não é alterado e dá para voltar à original.
 
 ### Biblioteca e reprodução
 - **Início** com tocadas recentemente, mais tocadas, álbuns, adicionadas recentemente e artistas.
@@ -51,6 +52,7 @@
 
 ### Identidade própria
 - Visual **hi-fi analógico**: grafite quente + laranja-sinal, tipografia **Archivo**, modo escuro, claro ou do sistema e 7 cores de destaque (ou a sua).
+- **Cor do fundo** (6 tons ou a sua) e **cinco estilos**: Atual, Opaco, Fosco, Metálico e Vidro — no Vidro e no Fosco o que passa por trás do mini player e da barra de abas fica desfocado.
 - Ícone novo: o **V é uma colcheia** escrita num pentagrama.
 
 ## Instalação
@@ -97,5 +99,6 @@ Feito por **Victor K** — [@victor-kauan-coder](https://github.com/victor-kauan
 - Fonte [Archivo](https://github.com/Omnibus-Type/Archivo) — SIL Open Font License 1.1 ([licença](third_party/Archivo-OFL.txt))
 - Letras sincronizadas: [LRCLIB](https://lrclib.net)
 - Reprodução: [AndroidX Media3](https://developer.android.com/media/media3)
+- Desfoque dos estilos Vidro e Fosco: [Haze](https://github.com/chrisbanes/haze) — Apache 2.0
 
 Distribuído sob a [licença MIT](LICENSE).
