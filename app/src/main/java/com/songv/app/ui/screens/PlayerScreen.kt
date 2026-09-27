@@ -43,6 +43,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Computer
+import androidx.compose.material.icons.rounded.Devices
 import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
@@ -130,7 +132,7 @@ private fun tomDePalco(cor: Color): Color {
     return c
 }
 
-private enum class Folha { TRADUCAO, TIMER, OPCOES_LETRA }
+private enum class Folha { TRADUCAO, TIMER, OPCOES_LETRA, SAIDA }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -139,6 +141,9 @@ fun PlayerScreen(vm: PlayerViewModel, nav: Navegador, modifier: Modifier = Modif
     val prefs by vm.preferencias.collectAsState()
     val estadoLetra by vm.letra.collectAsState()
     val timer by vm.timer.collectAsState()
+    val saida by vm.saida.collectAsState()
+    val noComputador = (saida as? com.songv.app.conexao.ConexaoComputador.Estado.Conectado)
+        ?.takeIf { it.somNoComputador }?.computador?.nome
     val musica = rep.atual
 
     var modoLetra by rememberSaveable { mutableStateOf(false) }
@@ -206,6 +211,7 @@ fun PlayerScreen(vm: PlayerViewModel, nav: Navegador, modifier: Modifier = Modif
             Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
                 BarraTopo(
                     origem = rep.origem,
+                    noComputador = noComputador,
                     modoLetra = modoLetra,
                     onFechar = { if (modoLetra) modoLetra = false else nav.playerAberto = false },
                     onMenu = { musica?.let { nav.menuMusica = it } },
@@ -246,6 +252,9 @@ fun PlayerScreen(vm: PlayerViewModel, nav: Navegador, modifier: Modifier = Modif
                             onLetra = { modoLetra = true },
                             onFila = { nav.filaAberta = true },
                             onTimer = { folha = Folha.TIMER },
+                            rotuloSaida = if (prefs.tocarNoComputador || noComputador != null) noComputador ?: "Tocar em" else null,
+                            saidaAtiva = noComputador != null,
+                            onSaida = { folha = Folha.SAIDA },
                             onEqualizador = {
                                 val intent = Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL)
                                     .putExtra(AudioEffect.EXTRA_AUDIO_SESSION, vm.player.audioSessionId)
@@ -278,13 +287,14 @@ fun PlayerScreen(vm: PlayerViewModel, nav: Navegador, modifier: Modifier = Modif
     when (folha) {
         Folha.TRADUCAO -> TraducaoSheet(vm, prefs, estadoLetra, onFechar = { folha = null })
         Folha.TIMER -> TimerSheet(vm, timer, onFechar = { folha = null })
+        Folha.SAIDA -> SaidaSheet(vm, onFechar = { folha = null })
         Folha.OPCOES_LETRA -> OpcoesLetraSheet(vm, estadoLetra, prefs.buscaOnline, onImportar = { importar.launch(arrayOf("*/*")) }, onFechar = { folha = null })
         null -> Unit
     }
 }
 
 @Composable
-private fun BarraTopo(origem: String?, modoLetra: Boolean, onFechar: () -> Unit, onMenu: () -> Unit) {
+private fun BarraTopo(origem: String?, noComputador: String?, modoLetra: Boolean, onFechar: () -> Unit, onMenu: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onFechar) {
             Icon(
@@ -296,6 +306,19 @@ private fun BarraTopo(origem: String?, modoLetra: Boolean, onFechar: () -> Unit,
         Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("Tocando de", style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f))
             Text(origem ?: "Sua biblioteca", style = MaterialTheme.typography.titleSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (noComputador != null) {
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                    Icon(Icons.Rounded.Computer, contentDescription = null, tint = LocalCoresSongV.current.sinalNoPalco, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "Tocando no $noComputador",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = LocalCoresSongV.current.sinalNoPalco,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
         }
         IconButton(onClick = onMenu) { Icon(Icons.Rounded.MoreVert, contentDescription = "Opções da faixa") }
     }
@@ -444,25 +467,38 @@ private fun PainelAcoes(
     onFila: () -> Unit,
     onTimer: () -> Unit,
     onEqualizador: () -> Unit,
+    rotuloSaida: String?,
+    saidaAtiva: Boolean,
+    onSaida: () -> Unit,
 ) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), horizontalArrangement = Arrangement.SpaceEvenly) {
-        TeclaAcao(Icons.Rounded.Lyrics, "Letra", letraAtiva, onLetra)
-        TeclaAcao(Icons.AutoMirrored.Rounded.QueueMusic, "Fila", false, onFila)
-        TeclaAcao(Icons.Rounded.Bedtime, rotuloTimer, timerAtivo, onTimer)
-        TeclaAcao(Icons.Rounded.Equalizer, "Equalizador", false, onEqualizador)
+    Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+        TeclaAcao(Icons.Rounded.Lyrics, "Letra", letraAtiva, onLetra, Modifier.weight(1f))
+        TeclaAcao(Icons.AutoMirrored.Rounded.QueueMusic, "Fila", false, onFila, Modifier.weight(1f))
+        TeclaAcao(Icons.Rounded.Bedtime, rotuloTimer, timerAtivo, onTimer, Modifier.weight(1f))
+        TeclaAcao(Icons.Rounded.Equalizer, "Equalizador", false, onEqualizador, Modifier.weight(1f))
+        if (rotuloSaida != null) {
+            TeclaAcao(if (saidaAtiva) Icons.Rounded.Computer else Icons.Rounded.Devices, rotuloSaida, saidaAtiva, onSaida, Modifier.weight(1f))
+        }
     }
 }
 
 @Composable
-private fun TeclaAcao(icone: ImageVector, rotulo: String, ativa: Boolean, onClick: () -> Unit) {
+private fun TeclaAcao(icone: ImageVector, rotulo: String, ativa: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     val sinal = LocalCoresSongV.current.sinalNoPalco
     Column(
-        Modifier.width(80.dp).clickable(onClickLabel = rotulo, onClick = onClick).padding(vertical = 6.dp),
+        modifier.clickable(onClickLabel = rotulo, onClick = onClick).padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(icone, contentDescription = null, tint = if (ativa) sinal else Color.White.copy(alpha = 0.85f))
         Spacer(Modifier.height(4.dp))
-        Text(rotulo, style = MaterialTheme.typography.labelSmall, color = if (ativa) sinal else Color.White.copy(alpha = 0.7f), maxLines = 1)
+        Text(
+            rotulo,
+            style = MaterialTheme.typography.labelSmall,
+            color = if (ativa) sinal else Color.White.copy(alpha = 0.7f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 4.dp),
+        )
     }
 }
 

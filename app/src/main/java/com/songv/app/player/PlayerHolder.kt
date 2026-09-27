@@ -16,6 +16,12 @@ import com.songv.app.ui.MainActivity
 object PlayerHolder {
 
     @Volatile private var player: ExoPlayer? = null
+
+    /** O som está saindo pelo computador: o player daqui toca mudo e ninguém deve devolver o volume. */
+    @Volatile var saidaNoComputador = false
+
+    /** Volume a aplicar no player local ([v] = volume desejado de 0 a 1). */
+    fun volumeLocal(v: Float) = if (saidaNoComputador) 0f else v
     @Volatile private var sessao: MediaSession? = null
 
     fun player(context: Context): ExoPlayer = player ?: synchronized(this) {

@@ -90,6 +90,7 @@ import com.songv.app.ui.screens.ConfiguracoesScreen
 import com.songv.app.ui.screens.FilaScreen
 import com.songv.app.ui.screens.InicioScreen
 import com.songv.app.ui.screens.PermissaoScreen
+import com.songv.app.ui.screens.PareamentoDialogo
 import com.songv.app.ui.screens.PesquisaLetraSheet
 import com.songv.app.ui.screens.PlayerScreen
 import com.songv.app.ui.screens.PlaylistScreen
@@ -376,6 +377,8 @@ private fun Casca(vm: PlayerViewModel, nav: Navegador) {
             )
         }
     }
+
+    PareamentoDialogo(vm)
 
     val estadoLetra by vm.letra.collectAsState()
     if (estadoLetra.pesquisaAberta) {

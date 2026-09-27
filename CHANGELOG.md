@@ -2,6 +2,17 @@
 
 Todas as mudanças relevantes do SongV. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
+## [2.2.0] — 2026-09-27
+
+### Novidades
+- **SongV para computador (Windows)**: player completo com a biblioteca do computador — capas, letras sincronizadas (SYLT, `.lrc`), busca sem acentos, álbuns, artistas, aleatório e repetir — com as mesmas cores de destaque, cores de fundo e estilos do app.
+- **Conectar ao computador** (Configurações › Computador): na mesma rede, mesmo **sem internet**, o computador navega e toca as músicas do celular. Reconecta sozinho ao abrir o app.
+- **Tocar em…** no player: o som do celular sai no computador, com capa e letra (e tradução) na tela grande; o celular segue no controle e volta a tocar nele mesmo sem parar a música. Endereço manual para quando a descoberta automática não funciona (hotspot).
+- Segurança: pareamento com código de 6 dígitos (ECDH P-256 com compromisso), tudo cifrado com AES-256-GCM, chaves no Keystore do Android e no Gerenciador de Credenciais do Windows.
+
+### Correções
+- O timer de sono não devolve mais o volume do celular enquanto o som está saindo no computador.
+
 ## [2.1.0] — 2026-09-27
 
 ### Novidades
@@ -88,6 +99,7 @@ Reformulação completa: nova identidade visual, nova navegação, letras tratad
 
 Primeira versão: biblioteca da pasta Music, player com letra `SYLT`/`USLT`, favoritos, playlists, fila e temas de cor.
 
+[2.2.0]: https://github.com/victor-kauan-coder/SongV/releases/tag/v2.2.0
 [2.1.0]: https://github.com/victor-kauan-coder/SongV/releases/tag/v2.1.0
 [2.0.1]: https://github.com/victor-kauan-coder/SongV/releases/tag/v2.0.1
 [2.0.0]: https://github.com/victor-kauan-coder/SongV/releases/tag/v2.0.0

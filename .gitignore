@@ -24,3 +24,8 @@ keystore.properties
 
 # Saídas locais de ferramentas
 biblioteca_demo/
+
+# SongV para computador (Tauri)
+desktop/node_modules/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/

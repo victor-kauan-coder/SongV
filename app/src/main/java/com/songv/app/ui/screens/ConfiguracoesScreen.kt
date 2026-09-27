@@ -36,12 +36,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Code
+import androidx.compose.material.icons.rounded.Computer
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Tune
@@ -109,6 +112,8 @@ fun ConfiguracoesScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: Pad
     var seletorCor by rememberSaveable { mutableStateOf(false) }
     var seletorFundo by rememberSaveable { mutableStateOf(false) }
     val cores = LocalCoresSongV.current
+    val pareados by vm.computadoresPareados.collectAsState()
+    val saida by vm.saida.collectAsState()
     fun abrir(url: String) = runCatching { contexto.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = contentPadding) {
@@ -276,6 +281,44 @@ fun ConfiguracoesScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: Pad
                 prefs.traduzirAutomaticamente,
                 { if (it) vm.ativarTraducao() else vm.desativarTraducao() },
             )
+        }
+
+        // ---- Computador ----
+        item { Secao("Computador") }
+        item {
+            LinhaChave(
+                "Tocar no computador",
+                "No player, “Tocar em” manda o som para um computador com o SongV na mesma rede — mesmo sem internet",
+                prefs.tocarNoComputador,
+                vm::definirTocarNoComputador,
+            )
+        }
+        if (prefs.tocarNoComputador) {
+            items(pareados, key = { "pc_${it.id}" }) { c ->
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(Icons.Rounded.Computer, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.width(20.dp))
+                    val ligado = (saida as? com.songv.app.conexao.ConexaoComputador.Estado.Conectado)?.computador?.id == c.id
+                    Column(Modifier.weight(1f)) {
+                        Text(c.nome, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            if (ligado) "Conectado · pode tocar as músicas deste celular" else "Pareado · ${c.host}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    TextButton(onClick = { if (ligado) vm.desconectarComputador() else vm.conectarComputador(c) }) {
+                        Text(if (ligado) "Desconectar" else "Conectar")
+                    }
+                    TextButton(onClick = { vm.esquecerComputador(c.id) }) { Text("Esquecer") }
+                }
+            }
+            item {
+                LinhaAcao(Icons.Rounded.Download, "Baixar o SongV para computador", "Windows · na página de versões do GitHub") { abrir("$REPOSITORIO/releases") }
+            }
         }
 
         // ---- Sobre ----

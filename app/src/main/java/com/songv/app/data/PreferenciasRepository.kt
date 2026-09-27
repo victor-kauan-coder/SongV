@@ -86,6 +86,7 @@ data class Preferencias(
     val buscaOnline: Boolean = true,
     val atrasosLetra: Map<String, Long> = emptyMap(),
     val buscasRecentes: List<String> = emptyList(),
+    val tocarNoComputador: Boolean = false,
 )
 
 /** Estado de reprodução salvo para retomar de onde parou na próxima abertura. */
@@ -131,6 +132,7 @@ class PreferenciasRepository(private val context: Context) {
         val ATRASOS = stringPreferencesKey("atrasos_letra")
         val BUSCAS = stringPreferencesKey("buscas_recentes")
         val SESSAO = stringPreferencesKey("sessao")
+        val TOCAR_NO_COMPUTADOR = booleanPreferencesKey("tocar_no_computador")
     }
 
     val preferencias: Flow<Preferencias> = context.dataStore.data.map { p ->
@@ -159,6 +161,7 @@ class PreferenciasRepository(private val context: Context) {
             buscaOnline = p[K.BUSCA_ONLINE] ?: true,
             atrasosLetra = p[K.ATRASOS]?.let { lerMapa(it) { v -> (v as Number).toLong() } }.orEmpty(),
             buscasRecentes = p[K.BUSCAS]?.let(::lerLista).orEmpty(),
+            tocarNoComputador = p[K.TOCAR_NO_COMPUTADOR] ?: false,
         )
     }
 
@@ -223,6 +226,7 @@ class PreferenciasRepository(private val context: Context) {
     suspend fun definirRomanizacao(v: Boolean) = editar { it[K.ROMANIZACAO] = v }
     suspend fun definirEscalaLetra(v: Float) = editar { it[K.ESCALA_LETRA] = v.coerceIn(0.8f, 1.4f) }
     suspend fun definirBuscaOnline(v: Boolean) = editar { it[K.BUSCA_ONLINE] = v }
+    suspend fun definirTocarNoComputador(v: Boolean) = editar { it[K.TOCAR_NO_COMPUTADOR] = v }
 
     suspend fun definirAtrasoLetra(id: String, ms: Long) = editar { p ->
         val mapa = p[K.ATRASOS]?.let { lerMapa(it) { v -> (v as Number).toLong() } }.orEmpty().toMutableMap()

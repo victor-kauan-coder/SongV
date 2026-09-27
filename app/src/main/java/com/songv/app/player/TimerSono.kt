@@ -41,11 +41,11 @@ object TimerSono {
             delay((total - FADE_MS).coerceAtLeast(0))
             val passos = 30
             for (i in 1..passos) {
-                player.volume = 1f - i / passos.toFloat()
+                player.volume = PlayerHolder.volumeLocal(1f - i / passos.toFloat())
                 delay(FADE_MS / passos)
             }
             player.pause()
-            player.volume = 1f
+            player.volume = PlayerHolder.volumeLocal(1f)
             _estado.value = Estado()
         }
     }
@@ -67,7 +67,7 @@ object TimerSono {
         ouvinte?.let(player::removeListener)
         ouvinte = null
         player.pauseAtEndOfMediaItems = false
-        player.volume = 1f
+        player.volume = PlayerHolder.volumeLocal(1f)
         _estado.value = Estado()
     }
 }

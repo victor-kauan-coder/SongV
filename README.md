@@ -50,6 +50,12 @@
 - **Timer de sono** (minutos ou fim da faixa) com volume diminuindo aos poucos, **equalizador do sistema**, **retomar de onde parou**.
 - Controles na **notificação**, tela de bloqueio e fones Bluetooth; pausa ao desconectar o fone.
 
+### No computador também
+- **SongV para Windows**: player completo com a biblioteca do computador (capas, letras sincronizadas, busca, álbuns, artistas) e as mesmas cores e estilos do app.
+- **Músicas do celular no computador**: com o celular conectado na mesma rede — mesmo **sem internet** — o computador navega e toca a biblioteca dele.
+- **Tocar em…**: o celular manda o som para o computador, como no Spotify Connect, e continua no controle; volta para o celular sem parar a música.
+- Tudo cifrado ponta a ponta (ECDH P-256 + AES-256-GCM), com pareamento por código de 6 dígitos. Detalhes em [docs/desktop.md](docs/desktop.md).
+
 ### Identidade própria
 - Visual **hi-fi analógico**: grafite quente + laranja-sinal, tipografia **Archivo**, modo escuro, claro ou do sistema e 7 cores de destaque (ou a sua).
 - **Cor do fundo** (6 tons ou a sua) e **cinco estilos**: Atual, Opaco, Fosco, Metálico e Vidro — no Vidro e no Fosco o que passa por trás do mini player e da barra de abas fica desfocado.
@@ -61,7 +67,9 @@
 2. Abra o arquivo no celular e permita a instalação de apps desta fonte.
 3. Coloque suas músicas na pasta **Music** (ou escolha outra pasta nas configurações) e conceda o acesso quando o app pedir.
 
-Requer **Android 8.0** ou mais recente. Detalhes na wiki: [Instalação](https://github.com/victor-kauan-coder/SongV/wiki/Instalação) e [Guia de uso](https://github.com/victor-kauan-coder/SongV/wiki/Guia-de-uso).
+Requer **Android 8.0** ou mais recente.
+
+**No computador (Windows 10/11):** baixe o `SongV-Setup-*.exe` na mesma página, instale e abra. Para ligar ao celular: no computador, **Configurações › Celular › Parear**; no celular, **Configurações › Tocar no computador** e depois **Tocar em…** no player. Os dois mostram um código de 6 dígitos para conferir. Detalhes na wiki: [Instalação](https://github.com/victor-kauan-coder/SongV/wiki/Instalação) e [Guia de uso](https://github.com/victor-kauan-coder/SongV/wiki/Guia-de-uso).
 
 ## Compilar
 
@@ -71,6 +79,8 @@ Com o **JDK 17+** e o **Android SDK** (API 34):
 ./gradlew assembleDebug          # APK de teste em app/build/outputs/apk/debug/
 ./gradlew testDebugUnitTest      # testes dos parsers ID3, LRC e da tradução
 ```
+
+O app do computador fica em `desktop/` (Tauri 2 — precisa de Rust e Node): `cd desktop && npm install && npx tauri build`; testes com `cargo test` em `desktop/src-tauri`.
 
 O build de release lê a assinatura de um `keystore.properties` na raiz (fora do git) — veja [Desenvolvimento](https://github.com/victor-kauan-coder/SongV/wiki/Desenvolvimento). Para testar sem músicas próprias, gere uma biblioteca de demonstração sintética com `python ferramentas/biblioteca_demo.py saida/`.
 
@@ -83,14 +93,19 @@ app/src/main/java/com/songv/app/
 ├── data/     varredura da biblioteca, capas (+ provider), preferências
 ├── model/    Musica, Album, Artista, Playlist, Letra
 ├── player/   ExoPlayer + MediaSession, serviço, ViewModel, timer de sono
+├── conexao/  conexão com o computador: pareamento, cripto, descoberta, "Tocar em…"
 └── ui/       tema, componentes e telas em Jetpack Compose
+
+desktop/
+├── src-tauri/src/  Rust: sessão cifrada, biblioteca do computador, letras, protocolo songv://
+└── ui/             interface do computador (HTML, CSS e JS, sem framework)
 ```
 
 A arquitetura completa está em [Arquitetura](https://github.com/victor-kauan-coder/SongV/wiki/Arquitetura) e o formato das tags em [Formato das tags ID3](https://github.com/victor-kauan-coder/SongV/wiki/Formato-das-tags-ID3).
 
 ## Privacidade
 
-O SongV não tem conta, anúncios nem telemetria. A internet só é usada quando você pede: para **buscar uma letra** (LRCLIB) ou **traduzir** (Google Tradutor). O resultado fica salvo no aparelho.
+O SongV não tem conta, anúncios nem telemetria. A internet só é usada quando você pede: para **buscar uma letra** (LRCLIB) ou **traduzir** (Google Tradutor). O resultado fica salvo no aparelho. A conexão com o computador é só na rede local, cifrada, e as faixas vindas do celular ficam apenas na memória do computador.
 
 ## Créditos
 

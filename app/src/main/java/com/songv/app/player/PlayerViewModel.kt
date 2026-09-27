@@ -18,6 +18,9 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder
 import com.songv.app.SongVApp
+import com.songv.app.conexao.Computador
+import com.songv.app.conexao.ConexaoComputador
+import com.songv.app.conexao.Descoberta
 import com.songv.app.data.Destaque
 import com.songv.app.data.EstiloVisual
 import com.songv.app.data.FundoTema
@@ -49,6 +52,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.stateIn
@@ -198,6 +203,25 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     init {
+        // Avisos da conexão com o computador viram snackbar; letra, tradução, sincronia e cor de
+        // destaque vão para a tela do computador.
+        viewModelScope.launch { app.computador.avisos.collect { avisar(it) } }
+        app.computador.biblioteca = { _biblioteca.value.porId }
+        viewModelScope.launch {
+            // Com a opção ligada, reconecta ao último computador assim que o app abre.
+            if (preferencias.first { it.carregadas }.tocarNoComputador) app.computador.conectarAoUltimo()
+        }
+        viewModelScope.launch {
+            combine(_letra, preferencias) { l, p ->
+                val argb = if (p.destaque == Destaque.PERSONALIZADO && p.corPersonalizada != null) p.corPersonalizada else p.destaque.argb.toInt()
+                listOf(l.musicaId, l.letra, l.traducao, l.musicaId?.let { p.atrasosLetra[it] } ?: 0L, "#%06X".format(argb and 0xFFFFFF))
+            }.distinctUntilChanged().collect { (id, letra, traducao, atraso, cor) ->
+                app.computador.destaque = cor as String
+                if (id is String && letra is Letra) {
+                    app.computador.atualizarLetra(id, letra.linhas, letra.tipo == TipoLetra.SINCRONIZADA, traducao as TradutorLetra.Traducao?, atraso as Long)
+                }
+            }
+        }
         player.addListener(ouvinte)
         runCatching {
             application.contentResolver.registerContentObserver(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, true, observadorMidia)
@@ -672,6 +696,29 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun definirCorPersonalizada(argb: Int) = viewModelScope.launch { prefs.definirCorPersonalizada(argb) }
     fun definirCoresDaCapa(v: Boolean) = viewModelScope.launch { prefs.definirCoresDaCapa(v) }
     fun definirEstilo(e: EstiloVisual) = viewModelScope.launch { prefs.definirEstilo(e) }
+
+    // ---- Tocar no computador ----
+
+    private val descoberta = Descoberta(application)
+    val saida: StateFlow<ConexaoComputador.Estado> = app.computador.estado
+    val computadoresPareados: StateFlow<List<Computador>> = app.computador.computadores.pareados
+    val computadoresAchados: StateFlow<List<Computador>> = descoberta.achados
+
+    fun procurarComputadores(ativo: Boolean) = if (ativo) descoberta.iniciar() else descoberta.parar()
+    fun tocarEm(c: Computador) = app.computador.tocarEm(c)
+    fun conectarComputador(c: Computador) = app.computador.conectar(c)
+    fun desconectarComputador() = app.computador.desconectar()
+    fun tocarNoCelular() = app.computador.tocarNoCelular()
+    fun confirmarPareamento(ok: Boolean) = app.computador.decidirPareamento(ok)
+    fun volumeComputador(v: Float) = app.computador.volumeDoComputador(v)
+    fun esquecerComputador(id: String) {
+        if ((saida.value as? ConexaoComputador.Estado.Conectado)?.computador?.id == id) app.computador.desconectar()
+        app.computador.computadores.esquecer(id)
+    }
+    fun definirTocarNoComputador(v: Boolean) = viewModelScope.launch {
+        prefs.definirTocarNoComputador(v)
+        if (v) app.computador.conectarAoUltimo() else app.computador.desconectar()
+    }
     fun definirFundo(f: FundoTema) = viewModelScope.launch { prefs.definirFundo(f) }
     fun definirCorFundoPersonalizada(argb: Int) = viewModelScope.launch { prefs.definirCorFundoPersonalizada(argb) }
 
@@ -873,6 +920,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     override fun onCleared() {
+        descoberta.parar()
         salvarSessao()
         player.removeListener(ouvinte)
         runCatching { getApplication<Application>().contentResolver.unregisterContentObserver(observadorMidia) }

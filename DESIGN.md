@@ -108,6 +108,18 @@ Uma família, três larguras: **Archivo** (SIL OFL 1.1), com instâncias estáti
 
 ---
 
-## 6. Estrutura de navegação
+## 6. SongV para computador
+
+Mesmo mundo, outra superfície (`desktop/ui/`). O modo é **operar** (biblioteca, fila) com um momento
+de **experiência**: o palco da letra.
+
+- **Estrutura:** barra lateral (logo, Início, Buscar, Álbuns, Artistas, Faixas, Bibliotecas, Configurações), conteúdo no centro e um **painel frontal** fixo embaixo — capa e título à esquerda, transporte e tempo no centro, letra e volume à direita. O conteúdo rola por baixo do painel, então Vidro e Fosco mostram desfoque de verdade (`backdrop-filter`).
+- **Bibliotecas:** "Este computador" e o celular conectado (com LED de conexão). Todas as telas mostram a biblioteca escolhida.
+- **Palco:** capa grande + letra-legenda (Archivo Condensada, linha ativa acesa, as outras a 30%), tingido pela cor da capa. Abre ao clicar na capa do painel ou em Letra, e sozinho quando o celular manda o som.
+- **Tokens:** `--fundo`, `--sinal`, `--sinal-texto` (contraste ≥ 4,5:1 calculado como no app) e `--no-sinal` vêm das configurações; as superfícies derivam do fundo com `color-mix`. Os acabamentos só definem variáveis (`--sup-cor`, `--sup-imagem`, `--sup-filtro`, `--sup-sombra`, `--ambiente`) — as miniaturas de estilo nas configurações usam exatamente as mesmas regras.
+- **Play:** círculo no sinal, triângulo centrado pelo baricentro (centro óptico). Com nada tocando, o play toca a biblioteca em vez de ficar apagado.
+- **Janela estreita (< 1000 px):** a barra lateral vira trilho de ícones e o painel esconde tempo e volume.
+
+## 7. Estrutura de navegação
 
 Três destinos na barra inferior — **Início** (descobrir), **Buscar** (encontrar), **Biblioteca** (organizar: Faixas, Álbuns, Artistas, Playlists). Detalhes (álbum, artista, playlist, configurações) empilham sobre a aba mantendo barra e mini player visíveis. Player e fila são camadas por cima de tudo. O "voltar" do sistema desfaz exatamente um nível.

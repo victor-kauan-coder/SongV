@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SongV</title>
+  <link rel="stylesheet" href="estilo.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body data-tela="inicio" data-fonte="pc" data-estilo="atual" data-palco="nao" data-tocando="nao" data-carregando="nao" data-receptor="nao" data-celular="nao" data-faixa="nao">
+
+  <div class="app">
+    <aside class="lateral superficie" aria-label="Navegação">
+      <div class="marca">
+        <svg class="logo" viewBox="27.8 29.6 50 50" aria-hidden="true"><path d="M39.62,73.98 A8.30,5.70 -24 1 0 54.78,67.22 A8.30,5.70 -24 1 0 39.62,73.98 Z M52.22,67.19 L55.34,68.26 L67.83,32.00 L64.34,32.00 Z M28.80,32.00 L37.20,32.00 L43.90,68.00 L47.30,66.80 Z M64.34,32.00 L67.83,32.00 C69.03,36.20 77.03,39.40 76.83,47.20 C76.73,50.60 75.43,53.40 73.83,55.20 C74.83,48.60 73.03,44.40 64.21,42.50 Z"/></svg>
+        <span class="palavra">Song<b>V</b></span>
+      </div>
+
+      <nav class="navegacao">
+        <button type="button" data-ir="inicio"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 3 10.2V21h6.5v-6h5v6H21V10.2z"/></svg>Início</button>
+        <button type="button" data-ir="buscar"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 3a7.5 7.5 0 0 1 5.96 12.06l4.24 4.23-1.41 1.42-4.24-4.24A7.5 7.5 0 1 1 10.5 3zm0 2a5.5 5.5 0 1 0 0 11 5.5 5.5 0 0 0 0-11z"/></svg>Buscar</button>
+        <button type="button" data-ir="albuns"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 1 0 20 10 10 0 0 1 0-20zm0 7a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm0 2a1 1 0 1 1 0 2 1 1 0 0 1 0-2z"/></svg>Álbuns</button>
+        <button type="button" data-ir="artistas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 11c4.4 0 8 2 8 4.5V21H4v-2.5C4 16 7.6 14 12 14z"/></svg>Artistas</button>
+        <button type="button" data-ir="faixas"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h11v2H4zm0 5h11v2H4zm0 5h7v2H4zm13-9h4v2h-2v8.5a2.5 2.5 0 1 1-2-2.45z"/></svg>Faixas</button>
+      </nav>
+
+      <section class="fontes" aria-labelledby="fontes-titulo">
+        <h2 id="fontes-titulo">Bibliotecas</h2>
+        <button type="button" data-fonte="pc">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 5h18v11H3zm2 2v7h14V7zM8 18h8v2H8z"/></svg>
+          <span><b>Este computador</b><small id="conta-pc">—</small></span>
+        </button>
+        <button type="button" data-fonte="celular" id="fonte-celular">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 3v13h8V5zm3 14.5v1h2v-1z"/></svg>
+          <span><b id="nome-celular">Celular</b><small id="conta-celular">Conectado</small></span>
+          <span class="led" aria-hidden="true"></span>
+        </button>
+      </section>
+
+      <button type="button" class="ir-config" data-ir="config"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m19.4 13 .1-1-.1-1 2.1-1.6-2-3.4-2.5 1a7 7 0 0 0-1.7-1l-.4-2.7h-4l-.4 2.7a7 7 0 0 0-1.7 1l-2.5-1-2 3.4L4.5 11l-.1 1 .1 1-2.1 1.6 2 3.4 2.5-1a7 7 0 0 0 1.7 1l.4 2.7h4l.4-2.7a7 7 0 0 0 1.7-1l2.5 1 2-3.4zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>Configurações</button>
+    </aside>
+
+    <main class="conteudo" id="conteudo" tabindex="-1"></main>
+
+    <section class="palco" id="palco" aria-label="Tocando agora">
+      <button type="button" class="tecla-icone fechar-palco" id="fechar-palco" aria-label="Voltar para a biblioteca">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.4 8.6 5.6 5.6 5.6-5.6L19 10l-7 7-7-7z"/></svg>
+      </button>
+      <div class="palco-lado">
+        <div class="capa capa-grande" id="palco-capa"></div>
+        <div class="palco-info">
+          <h1 id="palco-titulo">—</h1>
+          <p id="palco-artista"></p>
+        </div>
+      </div>
+      <div class="letra" id="letra" aria-label="Letra"></div>
+    </section>
+  </div>
+
+  <footer class="painel superficie" aria-label="Controles">
+    <div class="agora">
+      <button type="button" class="agora-capa" id="abrir-palco" aria-label="Abrir a letra">
+        <div class="capa" id="painel-capa"></div>
+      </button>
+      <div class="agora-texto">
+        <b id="painel-titulo">Nada tocando</b>
+        <span id="painel-artista">Escolha uma música</span>
+        <span class="origem"><span class="led" aria-hidden="true"></span><span id="painel-origem"></span></span>
+      </div>
+    </div>
+
+    <div class="centro">
+      <div class="transporte">
+        <button type="button" class="tecla-icone modo" id="aleatorio" aria-label="Ordem aleatória" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 4.5 20.5 8 17 11.5V9h-1.6a3 3 0 0 0-2.5 1.34L8.8 16.4A5 5 0 0 1 4.6 18.6H3v-2h1.6a3 3 0 0 0 2.5-1.34l4.1-6.06A5 5 0 0 1 15.4 7H17zM3 7h1.6a5 5 0 0 1 3.7 1.66L7 10.2A3 3 0 0 0 4.6 9H3zm14 7.5 3.5 3.5-3.5 3.5V19h-1.6a5 5 0 0 1-3.7-1.66l1.3-1.54A3 3 0 0 0 15.4 17H17z"/></svg>
+        </button>
+        <button type="button" class="tecla-icone" id="anterior" aria-label="Faixa anterior">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6h2v12H6zm3.5 6 8.5 6V6z"/></svg>
+        </button>
+        <button type="button" class="play" id="tocar" aria-label="Tocar">
+          <svg class="i-tocar" viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 5.6v12.8a1 1 0 0 0 1.53.85l10.1-6.4a1 1 0 0 0 0-1.7l-10.1-6.4A1 1 0 0 0 8.5 5.6z"/></svg>
+          <svg class="i-pausar" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5h3.5v14H7zm6.5 0H17v14h-3.5z"/></svg>
+        </button>
+        <button type="button" class="tecla-icone" id="proxima" aria-label="Próxima faixa">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 6h2v12h-2zM6 18l8.5-6L6 6z"/></svg>
+        </button>
+        <button type="button" class="tecla-icone modo" id="repetir" aria-label="Repetir" aria-pressed="false">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10V4.5l3.5 3.5L17 11.5V9H7v4H5V9a2 2 0 0 1 2-2zm10 10H7v2.5L3.5 16 7 12.5V15h10v-4h2v4a2 2 0 0 1-2 2z"/></svg>
+          <span class="um" aria-hidden="true">1</span>
+        </button>
+      </div>
+      <div class="tempo">
+        <span class="numeros" id="agora">0:00</span>
+        <input type="range" id="barra" min="0" max="1000" value="0" step="1" aria-label="Posição na faixa">
+        <span class="numeros" id="total">0:00</span>
+      </div>
+    </div>
+
+    <div class="extras">
+      <button type="button" class="tecla-icone modo" id="botao-letra" aria-label="Letra" aria-pressed="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H8l-4 3.5V5a1 1 0 0 1 1-1zm3 4v2h10V8zm0 4v2h7v-2z"/></svg>
+      </button>
+      <div class="volume">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6h4l5 4V5L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/></svg>
+        <input type="range" id="volume" min="0" max="100" value="100" step="1" aria-label="Volume">
+      </div>
+    </div>
+  </footer>
+
+  <dialog id="pareamento" aria-labelledby="par-titulo">
+    <h2 id="par-titulo">Parear com o celular</h2>
+    <p id="par-texto">Confira se o mesmo código aparece no celular.</p>
+    <p class="codigo numeros" id="par-codigo" aria-live="polite"></p>
+    <div class="dialogo-acoes">
+      <button type="button" class="tecla" id="par-cancelar">Cancelar</button>
+      <button type="button" class="tecla cheia" id="par-confirmar">Os códigos são iguais</button>
+    </div>
+  </dialog>
+
+  <div class="aviso" id="aviso" role="status" aria-live="polite"></div>
+  <audio id="audio" preload="auto"></audio>
+</body>
+</html>
