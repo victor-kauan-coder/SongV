@@ -6,6 +6,8 @@ import android.content.Intent
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.songv.app.SongVApp
 import androidx.media3.session.MediaSession
 import com.songv.app.ui.MainActivity
 
@@ -38,6 +40,10 @@ object PlayerHolder {
             .setHandleAudioBecomingNoisy(true)
             // Mantém a CPU acordada com a tela apagada (arquivos locais não precisam de wifi lock).
             .setWakeMode(C.WAKE_MODE_LOCAL)
+            // Faixas do computador (songvpc://) chegam pela conexão cifrada; o resto, do aparelho.
+            .setMediaSourceFactory(
+                DefaultMediaSourceFactory(FonteDoComputador.Fabrica(context.applicationContext, (context.applicationContext as SongVApp).computadorRemoto)),
+            )
             .build()
             .also { player = it }
     }

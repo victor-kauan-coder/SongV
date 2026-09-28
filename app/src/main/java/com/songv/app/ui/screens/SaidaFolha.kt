@@ -222,7 +222,7 @@ private fun ItemSaida(
 }
 
 @Composable
-private fun EnderecoDialogo(onConectar: (String, Int) -> Unit, onFechar: () -> Unit) {
+internal fun EnderecoDialogo(onConectar: (String, Int) -> Unit, onFechar: () -> Unit) {
     var texto by rememberSaveable { mutableStateOf("") }
     fun interpretar(): Pair<String, Int>? {
         val t = texto.trim().removePrefix("http://")
@@ -238,7 +238,7 @@ private fun EnderecoDialogo(onConectar: (String, Int) -> Unit, onFechar: () -> U
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "Digite o endereço que aparece no SongV do computador, em “O celular não encontrou este computador?”.",
+                    "Digite o endereço que aparece no SongV do computador, em Dispositivos (o botão do celular, no topo).",
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 OutlinedTextField(

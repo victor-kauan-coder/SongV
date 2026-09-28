@@ -262,6 +262,15 @@ fn tratar(n: &Arc<Nucleo>, claro: &[u8]) {
                     }
                 }
                 "pausar" | "retomar" | "buscar" | "volume" | "letra" | "saida" => n.emitir(&t, v),
+                // O celular navegando e tocando as músicas deste computador.
+                "biblioteca-pc?" => {
+                    let faixas = n.biblioteca.faixas.lock().unwrap().clone();
+                    n.enviar(json!({"t": "biblioteca-pc", "nome": n.nome, "faixas": &*faixas}));
+                }
+                "capa-pc?" | "letra-pc?" | "ler-pc" => {
+                    let (n, t, v) = (n.clone(), t.clone(), v.clone());
+                    tauri::async_runtime::spawn_blocking(move || servir_do_pc(&n, &t, &v));
+                }
                 _ => {}
             }
         }
@@ -276,10 +285,66 @@ fn tratar(n: &Arc<Nucleo>, claro: &[u8]) {
     }
 }
 
+/// Bloco de áudio mandado ao celular: pedaços de 256 KB (`u32 pedido ‖ u64 início ‖ bytes`).
+const PEDACO: usize = 256 * 1024;
+
+/// Pedidos do celular sobre a biblioteca daqui. Só faixas indexadas: nada de arquivos soltos.
+fn servir_do_pc(n: &Arc<Nucleo>, t: &str, v: &Value) {
+    let id = v["faixa"].as_str().unwrap_or_default();
+    let Some(f) = n.biblioteca.faixa(id) else { return };
+    match t {
+        "capa-pc?" => {
+            // Sem capa (ou grande demais para um quadro) = imagem vazia: o celular desenha a gerada.
+            let capa = n.biblioteca.capa(id).filter(|c| c.len() < 7 * 1024 * 1024);
+            let mut q = vec![quadros::TIPO_CAPA];
+            q.extend_from_slice(&(id.len() as u16).to_be_bytes());
+            q.extend_from_slice(id.as_bytes());
+            if let Some(c) = capa {
+                q.extend_from_slice(&c);
+            }
+            n.enviar_quadro(q);
+        }
+        "letra-pc?" => {
+            let letra = crate::letra::ler(std::path::Path::new(&f.caminho));
+            n.enviar(json!({"t": "letra-pc", "faixa": id, "letra": letra}));
+        }
+        _ => {
+            use std::io::{Read, Seek, SeekFrom};
+            let pedido = v["pedido"].as_u64().unwrap_or(0) as u32;
+            let mut pos = v["de"].as_u64().unwrap_or(0);
+            let fim = (pos + v["tamanho"].as_u64().unwrap_or(0).min(8 * 1024 * 1024)).min(f.tamanho);
+            let Ok(mut arq) = std::fs::File::open(&f.caminho) else { return };
+            if arq.seek(SeekFrom::Start(pos)).is_err() {
+                return;
+            }
+            let mut buf = vec![0u8; PEDACO];
+            while pos < fim {
+                let quer = PEDACO.min((fim - pos) as usize);
+                let Ok(lidos) = arq.read(&mut buf[..quer]) else { return };
+                if lidos == 0 {
+                    return;
+                }
+                let mut q = Vec::with_capacity(13 + lidos);
+                q.push(quadros::TIPO_AUDIO);
+                q.extend_from_slice(&pedido.to_be_bytes());
+                q.extend_from_slice(&pos.to_be_bytes());
+                q.extend_from_slice(&buf[..lidos]);
+                if !n.enviar_quadro(q) {
+                    return;
+                }
+                pos += lidos as u64;
+            }
+        }
+    }
+}
+
 fn tocar(n: &Arc<Nucleo>, v: Value) {
     let Ok(atual) = serde_json::from_value::<Meta>(v["faixa"].clone()) else { return };
-    let proxima = serde_json::from_value::<Meta>(v["proxima"].clone()).ok();
-    baixar(n, &atual, proxima.as_ref());
+    let proxima = serde_json::from_value::<Meta>(v["proxima"].clone()).ok().filter(|p| !p.id.starts_with("pc:"));
+    // Uma faixa deste computador na fila do celular: toca o arquivo daqui, não há o que baixar.
+    if !atual.id.starts_with("pc:") {
+        baixar(n, &atual, proxima.as_ref());
+    }
     n.emitir("tocar", v);
 }
 

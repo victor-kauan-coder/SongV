@@ -18,6 +18,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder
 import com.songv.app.SongVApp
+import com.songv.app.conexao.ComputadorRemoto
 import com.songv.app.conexao.Computador
 import com.songv.app.conexao.ConexaoComputador
 import com.songv.app.conexao.Descoberta
@@ -128,6 +129,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _biblioteca = MutableStateFlow(EstadoBiblioteca())
     val biblioteca: StateFlow<EstadoBiblioteca> = _biblioteca.asStateFlow()
+
+    /** As músicas do computador conectado (null sem conexão). */
+    val bibliotecaComputador = app.computadorRemoto.biblioteca
 
     private val _reproducao = MutableStateFlow(EstadoReproducao())
     val reproducao: StateFlow<EstadoReproducao> = _reproducao.asStateFlow()
@@ -344,6 +348,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
         registro.clear()
         player.shuffleModeEnabled = false
+        // Faixas do computador vêm pelo Wi-Fi: com a tela apagada ele também precisa ficar acordado.
+        player.setWakeMode(if (musicas.any { ComputadorRemoto.ehDoComputador(it.id) }) C.WAKE_MODE_NETWORK else C.WAKE_MODE_LOCAL)
         player.setMediaItems(musicas.map(::criarItem), inicio, 0L)
         if (embaralhar) {
             aplicarOrdem(ordemComPrimeiro(inicio, musicas.size))

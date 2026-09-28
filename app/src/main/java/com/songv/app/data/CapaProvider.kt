@@ -27,16 +27,17 @@ class CapaProvider : ContentProvider() {
         val partes = uri.pathSegments
         // O 4º segmento (opcional) só identifica a versão de uma capa escolhida à mão.
         if (partes.size !in 3..4 || partes[0] != "capa") throw FileNotFoundException(uri.toString())
-        val id = partes[1].toLongOrNull() ?: throw FileNotFoundException(uri.toString())
+        val id = partes[1]
         val modificado = partes[2].toLongOrNull() ?: throw FileNotFoundException(uri.toString())
         val app = context?.applicationContext as? SongVApp ?: throw FileNotFoundException(uri.toString())
 
-        val caminho = app.contentResolver.query(
-            ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id),
+        // Faixa do computador conectado ("pc:<id>"): a capa vem pela rede.
+        val caminho = app.computadorRemoto.biblioteca.value?.porId?.get(id)?.caminho ?: app.contentResolver.query(
+            ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id.toLongOrNull() ?: throw FileNotFoundException(uri.toString())),
             arrayOf(MediaStore.Audio.Media.DATA), null, null, null,
         )?.use { c -> if (c.moveToFirst()) c.getString(0) else null } ?: throw FileNotFoundException(uri.toString())
 
-        val arquivo = runBlocking { app.capas.garantirArquivo(id.toString(), modificado, caminho) }
+        val arquivo = runBlocking { app.capas.garantirArquivo(id, modificado, caminho) }
             ?: throw FileNotFoundException("Faixa sem capa")
         return ParcelFileDescriptor.open(arquivo, ParcelFileDescriptor.MODE_READ_ONLY)
     }

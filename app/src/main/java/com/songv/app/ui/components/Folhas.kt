@@ -1,5 +1,6 @@
 package com.songv.app.ui.components
 
+import com.songv.app.conexao.ComputadorRemoto
 import com.songv.app.ui.theme.acabamento
 import com.songv.app.ui.theme.corDeFolha
 import android.content.Intent
@@ -128,9 +129,11 @@ fun MenuMusicaSheet(
             )
             onIrAlbum?.let { ItemAcao(Icons.Rounded.Album, "Ir para o álbum", { it(); onFechar() }) }
             ItemAcao(Icons.Rounded.Person, "Ir para o artista", { onIrArtista(); onFechar() })
-            ItemAcao(Icons.Rounded.AddPhotoAlternate, "Trocar a capa", { onTrocarCapa(); onFechar() })
+            // Faixas do computador não têm arquivo neste aparelho: nada de trocar capa ou compartilhar.
+            val local = !ComputadorRemoto.ehDoComputador(musica.id)
+            if (local) ItemAcao(Icons.Rounded.AddPhotoAlternate, "Trocar a capa", { onTrocarCapa(); onFechar() })
             onRestaurarCapa?.let { ItemAcao(Icons.Rounded.SettingsBackupRestore, "Voltar à capa original", { it(); onFechar() }) }
-            ItemAcao(Icons.Rounded.Share, "Compartilhar arquivo", {
+            if (local) ItemAcao(Icons.Rounded.Share, "Compartilhar arquivo", {
                 val envio = Intent(Intent.ACTION_SEND).apply {
                     type = "audio/*"
                     putExtra(Intent.EXTRA_STREAM, musica.uri)
@@ -164,7 +167,7 @@ fun MenuMusicaSheet(
                             TipoLetra.AUSENTE -> "Não tem"
                         },
                     )
-                    Detalhe("Arquivo", musica.caminho)
+                    Detalhe("Arquivo", if (ComputadorRemoto.ehDoComputador(musica.id)) "No computador" else musica.caminho)
                 }
             },
         )

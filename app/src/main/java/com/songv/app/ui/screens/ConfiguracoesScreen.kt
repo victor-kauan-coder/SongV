@@ -44,6 +44,8 @@ import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.Computer
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Refresh
@@ -113,7 +115,14 @@ fun ConfiguracoesScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: Pad
     var seletorFundo by rememberSaveable { mutableStateOf(false) }
     val cores = LocalCoresSongV.current
     val pareados by vm.computadoresPareados.collectAsState()
+    val achados by vm.computadoresAchados.collectAsState()
     val saida by vm.saida.collectAsState()
+    var endereco by rememberSaveable { mutableStateOf(false) }
+    // Procura computadores na rede enquanto a seção está ligada e a tela aberta.
+    DisposableEffect(prefs.tocarNoComputador) {
+        vm.procurarComputadores(prefs.tocarNoComputador)
+        onDispose { vm.procurarComputadores(false) }
+    }
     fun abrir(url: String) = runCatching { contexto.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = contentPadding) {
@@ -287,8 +296,8 @@ fun ConfiguracoesScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: Pad
         item { Secao("Computador") }
         item {
             LinhaChave(
-                "Tocar no computador",
-                "No player, “Tocar em” manda o som para um computador com o SongV na mesma rede — mesmo sem internet",
+                "Conectar ao computador",
+                "Toque aqui as músicas do computador e, no player, mande o som para ele em “Tocar em” — na mesma rede, mesmo sem internet",
                 prefs.tocarNoComputador,
                 vm::definirTocarNoComputador,
             )
@@ -315,6 +324,14 @@ fun ConfiguracoesScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: Pad
                     }
                     TextButton(onClick = { vm.esquecerComputador(c.id) }) { Text("Esquecer") }
                 }
+            }
+            // Computadores novos na rede (com o SongV aberto): conectar pede o código de pareamento.
+            items(achados.filter { a -> pareados.none { it.id == a.id } }, key = { "novo_${it.id}" }) { c ->
+                val conectando = (saida as? com.songv.app.conexao.ConexaoComputador.Estado.Conectando)?.nome == c.nome
+                LinhaAcao(Icons.Rounded.Computer, c.nome, if (conectando) "Conectando…" else "Na rede · toque para conectar") { vm.conectarComputador(c) }
+            }
+            item {
+                LinhaAcao(Icons.Rounded.Add, "Adicionar pelo endereço", "O IP e a porta aparecem no SongV do computador, em Dispositivos") { endereco = true }
             }
             item {
                 LinhaAcao(Icons.Rounded.Download, "Baixar o SongV para computador", "Windows · na página de versões do GitHub") { abrir("$REPOSITORIO/releases") }
@@ -384,6 +401,15 @@ fun ConfiguracoesScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: Pad
             previa = { ajustarFundo(it, escuro) },
             onAplicar = { vm.definirCorFundoPersonalizada(it.toArgb()); seletorFundo = false },
             onFechar = { seletorFundo = false },
+        )
+    }
+    if (endereco) {
+        EnderecoDialogo(
+            onConectar = { host, porta ->
+                endereco = false
+                vm.conectarComputador(com.songv.app.conexao.Computador(id = "", nome = host, host = host, porta = porta))
+            },
+            onFechar = { endereco = false },
         )
     }
 }

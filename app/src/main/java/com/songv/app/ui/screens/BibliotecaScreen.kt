@@ -30,6 +30,7 @@ import androidx.compose.material.icons.automirrored.rounded.Sort
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Computer
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Person
@@ -77,6 +78,7 @@ fun BibliotecaScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: Paddin
     val bib by vm.biblioteca.collectAsState()
     val prefs by vm.preferencias.collectAsState()
     val rep by vm.reproducao.collectAsState()
+    val pc by vm.bibliotecaComputador.collectAsState()
     var criando by rememberSaveable { mutableStateOf(false) }
 
     val cabecalho: @Composable (Dp) -> Unit = { margem ->
@@ -84,7 +86,7 @@ fun BibliotecaScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: Paddin
             Row(Modifier.padding(start = margem, end = (margem - 12.dp).coerceAtLeast(0.dp)), verticalAlignment = Alignment.CenterVertically) {
                 Text("Biblioteca", style = MaterialTheme.typography.headlineLarge, modifier = Modifier.weight(1f))
                 when (nav.filtro) {
-                    FiltroBiblioteca.MUSICAS -> MenuOrdenacao(prefs.ordenacao, vm::definirOrdenacao)
+                    FiltroBiblioteca.MUSICAS, FiltroBiblioteca.COMPUTADOR -> MenuOrdenacao(prefs.ordenacao, vm::definirOrdenacao)
                     FiltroBiblioteca.PLAYLISTS -> IconButton(onClick = { criando = true }) {
                         Icon(Icons.Rounded.Add, contentDescription = "Nova playlist")
                     }
@@ -96,11 +98,17 @@ fun BibliotecaScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: Paddin
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.padding(top = 12.dp, bottom = 8.dp),
             ) {
-                items(FiltroBiblioteca.entries) { f ->
+                // O computador só aparece conectado (ou enquanto a aba dele está aberta).
+                items(FiltroBiblioteca.entries.filter { it != FiltroBiblioteca.COMPUTADOR || pc != null || nav.filtro == it }) { f ->
                     FilterChip(
                         selected = nav.filtro == f,
                         onClick = { nav.filtro = f },
-                        label = { Text(f.rotulo) },
+                        label = { Text(if (f == FiltroBiblioteca.COMPUTADOR) pc?.nome ?: f.rotulo else f.rotulo, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        leadingIcon = if (f == FiltroBiblioteca.COMPUTADOR) {
+                            { Icon(Icons.Rounded.Computer, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        } else {
+                            null
+                        },
                         shape = CircleShape,
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = LocalCoresSongV.current.sinal,
@@ -141,6 +149,47 @@ fun BibliotecaScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: Paddin
                             onClick = { vm.tocar(lista, i, origem = "Biblioteca") },
                             onMenu = { nav.menuMusica = m },
                         )
+                    }
+                }
+            }
+        }
+
+        FiltroBiblioteca.COMPUTADOR -> {
+            val atual = pc
+            val lista = remember(atual, prefs.ordenacao) { atual?.let { vm.ordenar(it.musicas, prefs.ordenacao) }.orEmpty() }
+            LazyColumn(Modifier.fillMaxSize(), contentPadding = contentPadding) {
+                item { cabecalho(16.dp) }
+                when {
+                    atual == null -> item {
+                        EstadoVazio(Icons.Rounded.Computer, "Computador desconectado", "Conecte em Configurações › Computador para navegar e tocar as músicas dele aqui.")
+                    }
+                    lista.isEmpty() -> item {
+                        EstadoVazio(Icons.Rounded.Computer, "Nada no ${atual.nome}", "O SongV do computador não encontrou músicas na pasta configurada.")
+                    }
+                    else -> {
+                        item {
+                            Row(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "${plural(lista.size, "faixa")} · no ${atual.nome}",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.weight(1f),
+                                )
+                                BotaoPilula("Aleatório", { vm.tocar(lista, origem = atual.nome, aleatorio = true) }, icone = Icons.Rounded.Shuffle)
+                            }
+                        }
+                        itemsIndexed(lista, key = { _, m -> m.id }) { i, m ->
+                            LinhaMusica(
+                                musica = m,
+                                ativa = rep.atual?.id == m.id,
+                                tocando = rep.tocando,
+                                subtitulo = if (prefs.ordenacao == Ordenacao.ALBUM && m.album.isNotBlank()) "${m.album} · ${m.artista}" else m.artista,
+                                onClick = { vm.tocar(lista, i, origem = atual.nome) },
+                                onMenu = { nav.menuMusica = m },
+                            )
+                        }
                     }
                 }
             }

@@ -1,6 +1,7 @@
 package com.songv.app
 
 import android.app.Application
+import com.songv.app.conexao.ComputadorRemoto
 import com.songv.app.conexao.ConexaoComputador
 import com.songv.app.data.CapaRepository
 import com.songv.app.data.MusicaRepository
@@ -21,4 +22,5 @@ class SongVApp : Application() {
     val letras by lazy { LetraRepository(this) }
     val tradutor by lazy { TradutorLetra(this) }
     val computador by lazy { ConexaoComputador(this) }
+    val computadorRemoto by lazy { ComputadorRemoto() }
 }

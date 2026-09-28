@@ -15,7 +15,7 @@ o roteador do próprio celular). Nada passa por servidor nenhum.
 | Tocar a pasta de músicas do computador (MP3, FLAC, M4A, OGG, Opus, WAV) com capas e letras sincronizadas (SYLT, `.lrc`) | Mandar o som para o computador em **Tocar em…** e voltar para o celular sem parar a música |
 | Navegar e tocar a **biblioteca do celular** conectado (capas, letras e o arquivo original vêm pela rede) | Continuar no controle: fila, aleatório, timer, fone Bluetooth e notificação seguem funcionando |
 | Ver a letra grande, como legenda, com tradução e romanização quando o celular manda o som | Conectar/desconectar e esquecer computadores em **Configurações › Computador** |
-| Cor de destaque, cor do fundo e os estilos Atual, Opaco, Fosco, Metálico e Vidro | |
+| Cor de destaque, cor do fundo e os estilos Atual, Opaco, Fosco, Metálico e Vidro | Navegar e tocar as **músicas do computador** na Biblioteca (aba com o nome dele), com capas e letras, sem copiar arquivos |
 | Interface de player de desktop: biblioteca à esquerda, fila à direita, busca ao vivo, páginas de álbum e artista, tela cheia com letra | |
 
 ## Como funciona
@@ -121,9 +121,17 @@ Chaves de sessão: `HKDF(K, nC ‖ nN, "songv-c2n")` e `"songv-n2c"`. O primeiro
 | N | `comando` | `retomar`, `pausar`, `proxima`, `anterior`, `buscar`, `devolver` |
 | N | `terminou` / `saida-livre` | a faixa acabou aqui / o computador passou a tocar a própria fila |
 | C/N | `ping` / `pong` | latência e sinal de vida (a cada 4 s) |
+| C | `biblioteca-pc?` | pede a lista do computador; N responde `biblioteca-pc` (nome e faixas) |
+| C | `capa-pc?` / `letra-pc?` | pede a capa (N responde com quadro tipo 3; imagem vazia = sem capa) ou a letra (N responde `letra-pc`) |
+| C | `ler-pc` | pedido, faixa, início, tamanho — N responde com blocos de áudio (só faixas indexadas) |
 
 Quadros binários: tipo 2 = bloco de áudio (`u32 pedido ‖ u64 início ‖ bytes`), tipo 3 = capa
-(`u16 tamanho do id ‖ id ‖ imagem`).
+(`u16 tamanho do id ‖ id ‖ imagem`) — nos dois sentidos.
+
+No celular, as faixas do computador viram `Musica` com id `pc:<id>` e URI `songvpc://faixa/<id>`; o
+ExoPlayer lê por `FonteDoComputador`, que pede blocos de 1 MB (e adianta os dois seguintes) e guarda
+os 12 mais recentes em memória. Se o celular mandar uma faixa `pc:` para tocar no computador, ele toca
+o próprio arquivo.
 
 ## Onde está no código
 
@@ -131,7 +139,7 @@ Quadros binários: tipo 2 = bloco de áudio (`u32 pedido ‖ u64 início ‖ byt
 |---|---|
 | Computador — rede, cripto, biblioteca | `desktop/src-tauri/src/` (`sessao.rs`, `cripto.rs`, `quadros.rs`, `pares.rs`, `faixas.rs`, `biblioteca.rs`, `letra.rs`, `descoberta.rs`, `lib.rs`) |
 | Computador — interface | `desktop/ui/` (`index.html`, `estilo.css`, `app.js`, `player.js`, `letra.js`, `ponte.js`) |
-| Celular | `app/src/main/java/com/songv/app/conexao/` e `ui/screens/SaidaFolha.kt` |
+| Celular | `app/src/main/java/com/songv/app/conexao/` (`ComputadorRemoto.kt` para a biblioteca do computador), `player/FonteDoComputador.kt` e `ui/screens/SaidaFolha.kt` |
 | Testes | `cargo test` em `desktop/src-tauri` (cripto com vetores independentes, quadros, blocos, LRC, SYLT/USLT) e `CriptoTest.kt` no Android (mesmos vetores) |
 
 ## Compilar

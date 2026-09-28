@@ -23,7 +23,7 @@ enum class Aba(val rotulo: String, val icone: ImageVector, val iconeAtivo: Image
 }
 
 /** Seções da aba Biblioteca. */
-enum class FiltroBiblioteca(val rotulo: String) { MUSICAS("Faixas"), ALBUNS("Álbuns"), ARTISTAS("Artistas"), PLAYLISTS("Playlists") }
+enum class FiltroBiblioteca(val rotulo: String) { MUSICAS("Faixas"), ALBUNS("Álbuns"), ARTISTAS("Artistas"), PLAYLISTS("Playlists"), COMPUTADOR("Computador") }
 
 /** Telas de detalhe empilhadas sobre a aba atual (a barra inferior e o mini player continuam visíveis). */
 sealed interface Rota {

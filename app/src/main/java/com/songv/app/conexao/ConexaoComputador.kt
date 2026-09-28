@@ -226,6 +226,7 @@ class ConexaoComputador(private val context: Context) {
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            android.util.Log.w("SongV", "conexão com ${alvo.nome} terminou", e)
             // Reconexão automática ao abrir o app falha calada: o computador pode estar desligado.
             val texto = when {
                 e is Falha -> e.message
@@ -319,7 +320,9 @@ class ConexaoComputador(private val context: Context) {
      */
     private fun abrirSocket(host: String, porta: Int): Socket {
         val ip = InetAddress.getByName(host)
-        val socket = redePara(ip)?.socketFactory?.createSocket() ?: Socket()
+        // Algumas redes não aceitam o vínculo (EPERM: rede restrita, perfil de trabalho, emulador):
+        // aí segue pela rota padrão, que em Wi-Fi comum já é a certa.
+        val socket = redePara(ip)?.let { rede -> runCatching { rede.socketFactory.createSocket() }.getOrNull() } ?: Socket()
         socket.tcpNoDelay = true
         socket.connect(InetSocketAddress(ip, porta), 5_000)
         return socket
@@ -378,6 +381,7 @@ class ConexaoComputador(private val context: Context) {
         fila = controle
         permitidas = emptySet()
         capaEnviada = null
+        app.computadorRemoto.conectou { m -> controle.trySend(Quadros.json(m)).isSuccess }
         sock.soTimeout = 20_000 // ping a cada 4 s: silêncio longo é conexão morta
         _estado.value = Estado.Conectado(pc, somNoComputador = false, volume = 1f)
         computadores.marcarUltimo(pc.id)
@@ -402,7 +406,12 @@ class ConexaoComputador(private val context: Context) {
         try {
             while (isActive) {
                 val claro = abrir.abrir(Quadros.ler(entrada))
-                if (claro.isEmpty() || claro[0] != Quadros.JSON) continue
+                when (claro.firstOrNull()) {
+                    Quadros.AUDIO -> { app.computadorRemoto.receberAudio(claro, 1); continue }
+                    Quadros.CAPA -> { app.computadorRemoto.receberCapa(claro, 1); continue }
+                    Quadros.JSON -> Unit
+                    else -> continue
+                }
                 val m = JSONObject(String(claro, 1, claro.size - 1))
                 when (m.optString("t")) {
                     "pong" -> {
@@ -430,9 +439,12 @@ class ConexaoComputador(private val context: Context) {
                     "biblioteca" -> launch { enviarBiblioteca() }
                     "letra?" -> launch { enviarLetraDe(m.optString("faixa")) }
                     "capa?" -> launch { enviarCapaDe(m.optString("faixa")) }
+                    "biblioteca-pc" -> app.computadorRemoto.receberBiblioteca(m)
+                    "letra-pc" -> app.computadorRemoto.receberLetra(m)
                 }
             }
         } finally {
+            app.computadorRemoto.desconectou()
             ping.cancel()
             servidor.cancel()
             escritor.cancel()

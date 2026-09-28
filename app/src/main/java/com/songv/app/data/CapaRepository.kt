@@ -1,5 +1,7 @@
 package com.songv.app.data
 
+import com.songv.app.SongVApp
+import com.songv.app.conexao.ComputadorRemoto
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -105,9 +107,17 @@ class CapaRepository(private val context: Context) {
         val destino = arquivo(id, modificado)
         if (destino.exists()) return@withContext destino
         if (marcadorSemCapa(id, modificado).exists()) return@withContext null
+        // Faixa do computador: a capa vem pela rede (fora do lock, para não segurar as locais).
+        // Sem resposta, tenta de novo depois — só "sem capa" de verdade vira marcador.
+        val doComputador = if (caminho.startsWith(ComputadorRemoto.ESQUEMA + ":")) {
+            (context.applicationContext as SongVApp).computadorRemoto.capa(caminho.substringAfter(':')) ?: return@withContext null
+        } else {
+            null
+        }
         gerando.withLock {
             if (destino.exists()) return@withLock destino
-            val bitmap = bytesOriginais(caminho)?.let { decodificar(it, 512) }
+            val bytes = if (doComputador != null) doComputador.takeIf { it.isNotEmpty() } else bytesOriginais(caminho)
+            val bitmap = bytes?.let { decodificar(it, 512) }
             if (bitmap == null) {
                 runCatching { marcadorSemCapa(id, modificado).createNewFile() }
                 return@withLock null

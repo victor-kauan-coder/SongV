@@ -1,5 +1,7 @@
 package com.songv.app.letra
 
+import com.songv.app.SongVApp
+import com.songv.app.conexao.ComputadorRemoto
 import android.content.Context
 import android.net.Uri
 import com.songv.app.id3.Id3Parser
@@ -47,6 +49,11 @@ class LetraRepository(private val context: Context) {
 
     suspend fun carregar(m: Musica): Letra = withContext(Dispatchers.IO) {
         lerSalva(m)?.let { return@withContext it }
+        if (ComputadorRemoto.ehDoComputador(m.id)) {
+            // Faixa do computador: a letra do arquivo vem de lá (SYLT, USLT ou .lrc).
+            val app = context.applicationContext as SongVApp
+            return@withContext app.computadorRemoto.letra(m.id.removePrefix(ComputadorRemoto.PREFIXO_ID)) ?: Letra.AUSENTE
+        }
 
         val tags = if (m.ehMp3) Id3Parser.lerTags(m.caminho) else null
         tags?.sylt?.let { sylt ->

@@ -51,8 +51,8 @@
 - Controles na **notificação**, tela de bloqueio e fones Bluetooth; pausa ao desconectar o fone.
 
 ### No computador também
-- **SongV para Windows**: player completo com a biblioteca do computador (capas, letras sincronizadas, busca, álbuns, artistas) e as mesmas cores e estilos do app.
-- **Músicas do celular no computador**: com o celular conectado na mesma rede — mesmo **sem internet** — o computador navega e toca a biblioteca dele.
+- **SongV para Windows**: player completo no jeito dos players de desktop — biblioteca à esquerda, fila à direita, busca ao vivo, páginas de álbum e artista, letra em tela cheia — com as mesmas cores e estilos do app.
+- **Músicas dos dois lados**: com o celular conectado na mesma rede — mesmo **sem internet** — o computador navega e toca a biblioteca do celular, e o celular navega e toca a do computador (aba com o nome dele na Biblioteca).
 - **Tocar em…**: o celular manda o som para o computador, como no Spotify Connect, e continua no controle; volta para o celular sem parar a música.
 - Tudo cifrado ponta a ponta (ECDH P-256 + AES-256-GCM), com pareamento por código de 6 dígitos. Detalhes em [docs/desktop.md](docs/desktop.md).
 

@@ -2,13 +2,20 @@
 
 Todas as mudanças relevantes do SongV. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
-## [Não lançado]
+## [2.3.0] — 2026-09-28
 
 ### Novidades
+- **Logo nova** no celular e no computador: ícone, splash, notificação, cabeçalho e instalador, recortados da arte original sem redesenho (mesmas formas, sombras e cores). Com outra cor de destaque, a marca no app acompanha a cor mantendo as sombras.
+- **Músicas do computador no celular**: com o celular conectado, a Biblioteca ganha a aba do computador — navegue e toque as músicas dele pelo Wi-Fi, com capas e letras, sem internet e sem copiar arquivos.
 - **SongV para computador 1.1.0 — interface nova**, no jeito dos players de desktop: **Sua biblioteca** à esquerda (álbuns e artistas, filtro, ordem por recentes ou A–Z, chips para trocar entre o computador e o celular), **Tocando agora + A seguir** à direita e a busca em pílula no topo, com resultados enquanto você digita (Melhor resultado, Músicas, Artistas, Álbuns).
 - Páginas de **álbum, artista e Todas as faixas** com cabeçalho na cor da capa, play grande, barra fixa ao rolar e tabela de faixas (duplo clique toca, artista e álbum viram links). Início com saudação, atalhos e fileiras de recentes; **Navegar por tudo** em blocos coloridos.
 - **Dispositivos** na barra do player e na pílula do celular: ver quem está conectado, parear e o endereço para digitar no celular.
+- **Barra da janela integrada** no computador, como nos players de desktop: menu "•••" (configurações, pasta de músicas, atualizar a biblioteca, conectar um celular) e minimizar/maximizar/fechar na própria barra do app.
+- **Conectar ao computador direto pelas Configurações** do celular: computadores encontrados na rede e "Adicionar pelo endereço", sem precisar abrir o player.
 - **Tela cheia** com a letra; **voltar/avançar** (também pelos botões laterais do mouse e Alt+setas); Ctrl+K ou Ctrl+F vai para a busca; Ctrl+setas trocam de faixa; botão de sem som.
+
+### Correções
+- Em algumas redes o Android recusava prender a conexão ao Wi-Fi e o celular não conectava ao computador ("a conexão caiu"). Agora ele segue pela rota padrão nesses casos.
 
 ## [2.2.0] — 2026-09-27
 

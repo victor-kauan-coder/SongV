@@ -53,6 +53,14 @@ impl Nucleo {
         }
     }
 
+    /// Manda um quadro já montado (`tipo ‖ carga`, em claro: a sessão cifra).
+    fn enviar_quadro(&self, q: Vec<u8>) -> bool {
+        match self.sessao.lock().unwrap().as_ref() {
+            Some((_, tx, _)) => tx.send(q).is_ok(),
+            None => false,
+        }
+    }
+
     fn emitir<S: Serialize + Clone>(&self, evento: &str, dados: S) {
         let _ = self.app.emit(evento, dados);
     }
