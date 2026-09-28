@@ -16,6 +16,7 @@ o roteador do próprio celular). Nada passa por servidor nenhum.
 | Navegar e tocar a **biblioteca do celular** conectado (capas, letras e o arquivo original vêm pela rede) | Continuar no controle: fila, aleatório, timer, fone Bluetooth e notificação seguem funcionando |
 | Ver a letra grande, como legenda, com tradução e romanização quando o celular manda o som | Conectar/desconectar e esquecer computadores em **Configurações › Computador** |
 | Cor de destaque, cor do fundo e os estilos Atual, Opaco, Fosco, Metálico e Vidro | |
+| Interface de player de desktop: biblioteca à esquerda, fila à direita, busca ao vivo, páginas de álbum e artista, tela cheia com letra | |
 
 ## Como funciona
 

@@ -2,6 +2,14 @@
 
 Todas as mudanças relevantes do SongV. O formato segue o [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/).
 
+## [Não lançado]
+
+### Novidades
+- **SongV para computador 1.1.0 — interface nova**, no jeito dos players de desktop: **Sua biblioteca** à esquerda (álbuns e artistas, filtro, ordem por recentes ou A–Z, chips para trocar entre o computador e o celular), **Tocando agora + A seguir** à direita e a busca em pílula no topo, com resultados enquanto você digita (Melhor resultado, Músicas, Artistas, Álbuns).
+- Páginas de **álbum, artista e Todas as faixas** com cabeçalho na cor da capa, play grande, barra fixa ao rolar e tabela de faixas (duplo clique toca, artista e álbum viram links). Início com saudação, atalhos e fileiras de recentes; **Navegar por tudo** em blocos coloridos.
+- **Dispositivos** na barra do player e na pílula do celular: ver quem está conectado, parear e o endereço para digitar no celular.
+- **Tela cheia** com a letra; **voltar/avançar** (também pelos botões laterais do mouse e Alt+setas); Ctrl+K ou Ctrl+F vai para a busca; Ctrl+setas trocam de faixa; botão de sem som.
+
 ## [2.2.0] — 2026-09-27
 
 ### Novidades

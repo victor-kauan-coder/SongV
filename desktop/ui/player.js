@@ -4,7 +4,7 @@
 //  - receptor: o celular escolheu este computador em "Tocar em…" e manda na fila — os botões
 //    daqui viram comandos para ele.
 
-import { $, invoke, url, tempo, capa, avisar } from "./ponte.js";
+import { $, invoke, url, tempo, capa, avisar, corDaCapa } from "./ponte.js";
 import { mostrarLetra, sincronizarLetra, letraDe } from "./letra.js";
 
 const audio = $("audio");
@@ -17,6 +17,7 @@ export const player = {
   pos: -1, // posição em `ordem`
   aleatorio: false,
   repetir: 0, // 0 = não, 1 = a fila, 2 = a faixa
+  origem: null, // { chave, nome }: de onde veio a fila (álbum, artista, todas as faixas…)
   receptor: null, // { celular, faixa, proxima } enquanto o celular manda o som
   ouvintes: new Set(),
 };
@@ -42,10 +43,11 @@ function embaralhar(n, primeiro) {
 // ---------------------------------------------------------------- fila própria
 
 /** Toca uma lista (álbum, busca, todas as faixas) a partir de `inicio`. */
-export function tocarLista(fonte, faixas, inicio = 0, { aleatorio = player.aleatorio } = {}) {
+export function tocarLista(fonte, faixas, inicio = 0, { aleatorio = player.aleatorio, origem = null } = {}) {
   if (!faixas.length) return;
   sairDoReceptor(true);
   player.fila = faixas.map((f) => ({ fonte, f }));
+  player.origem = origem;
   player.aleatorio = aleatorio;
   player.ordem = aleatorio ? embaralhar(faixas.length, inicio) : [...faixas.keys()];
   player.pos = aleatorio ? 0 : inicio;
@@ -53,10 +55,31 @@ export function tocarLista(fonte, faixas, inicio = 0, { aleatorio = player.aleat
   carregar(true);
 }
 
+/** As próximas `n` da fila, na ordem em que vão tocar (com a volta, se repetir a fila). */
+export function proximas(n = 8) {
+  if (player.receptor) return player.receptor.proxima ? [{ item: { fonte: "celular", f: player.receptor.proxima }, pos: -1 }] : [];
+  const { ordem, pos, repetir } = player;
+  const r = [];
+  for (let k = 1; k <= n && r.length < ordem.length - 1; k++) {
+    let p = pos + k;
+    if (p >= ordem.length) {
+      if (repetir !== 1) break;
+      p -= ordem.length;
+    }
+    r.push({ item: player.fila[ordem[p]], pos: p });
+  }
+  return r;
+}
+
+export function pularPara(pos) {
+  if (player.receptor || pos < 0 || pos >= player.ordem.length) return;
+  player.pos = pos;
+  carregar(true);
+}
+
 function carregar(tocar, posicaoMs = 0) {
   const item = itemAtual();
   if (!item) return;
-  $("tocar").disabled = false;
   const { fonte, f } = item;
   if (fonte === "celular") {
     const prox = proximoItem();
@@ -135,12 +158,14 @@ export function alternarAleatorio() {
     player.pos = player.aleatorio ? 0 : atual;
   }
   mostrarModos();
+  avisarMudanca();
 }
 
 export function alternarRepetir() {
   if (player.receptor) return;
   player.repetir = (player.repetir + 1) % 3;
   mostrarModos();
+  avisarMudanca();
 }
 
 function mostrarModos() {
@@ -176,6 +201,25 @@ export function buscar(ms) {
   sincronizarLetra(ms, true);
 }
 
+const SOM = '<path d="M4 9v6h4l5 4V5L8 9H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4zM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6z"/>';
+const MUDO = '<path d="M4 9v6h4l5 4V5L8 9H4zm12.6 3 2.7-2.7-1.4-1.4-2.7 2.7-2.7-2.7-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4z"/>';
+
+function mostrarVolume() {
+  const v = audio.muted ? 0 : Math.round(audio.volume * 100);
+  const vol = $("volume");
+  vol.value = v;
+  vol.style.setProperty("--p", `${v}%`);
+  const m = $("mudo");
+  m.querySelector("svg").innerHTML = v === 0 ? MUDO : SOM;
+  m.setAttribute("aria-label", audio.muted ? "Ligar o som" : "Sem som");
+  m.title = m.getAttribute("aria-label");
+}
+
+export function alternarMudo() {
+  audio.muted = !audio.muted;
+  mostrarVolume();
+}
+
 // ---------------------------------------------------------------- modo receptor
 
 /** "tocar" vindo do celular: ele passou a mandar o som para cá. */
@@ -186,11 +230,20 @@ export function receberDoCelular(msg, nomeCelular) {
   player.receptor = { celular: nomeCelular, faixa: f, proxima: msg.proxima || null };
   marcar("receptor", true);
   $("painel-origem").textContent = `Do ${nomeCelular}`;
+  $("dir-receptor-texto").textContent = `O som vem do ${nomeCelular}. Os controles daqui mandam nele.`;
   if (!mesma) {
-    audio.src = url.celular(f.id);
+    // "pc:<id>": uma faixa deste computador na fila do celular — toca o arquivo daqui.
+    const daqui = f.id.startsWith("pc:") && { ...f, id: f.id.slice(3) };
+    audio.src = daqui ? url.local(daqui.id) : url.celular(f.id);
     audio.currentTime = (msg.posicaoMs || 0) / 1000;
-    mostrarFaixa({ fonte: "celular", f });
-    if (letraDe() !== f.id) mostrarLetra(null, "", true);
+    mostrarFaixa(daqui ? { fonte: "pc", f: daqui } : { fonte: "celular", f });
+    if (daqui) {
+      invoke("letra_local", { id: daqui.id }).then((l) => {
+        if (player.receptor?.faixa.id !== f.id) return;
+        if (l) mostrarLetra({ faixa: f.id, atrasoMs: 0, ...l });
+        else mostrarLetra(null, "Sem letra para esta faixa.");
+      });
+    } else if (letraDe() !== f.id) mostrarLetra(null, "", true);
   } else if (Math.abs(audio.currentTime * 1000 - (msg.posicaoMs || 0)) > 1500) {
     audio.currentTime = msg.posicaoMs / 1000;
   }
@@ -208,8 +261,7 @@ export function comandoDoCelular(tipo, payload) {
   else if (tipo === "buscar" && Math.abs(audio.currentTime * 1000 - payload.posicaoMs) > 400) audio.currentTime = payload.posicaoMs / 1000;
   else if (tipo === "volume") {
     audio.volume = Math.min(1, Math.max(0, payload.volume));
-    $("volume").value = Math.round(audio.volume * 100);
-    $("volume").style.setProperty("--p", `${audio.volume * 100}%`);
+    mostrarVolume();
   }
 }
 
@@ -226,16 +278,8 @@ export function sairDoReceptor(avisarCelular = false) {
   marcar("tocando", false);
   marcar("carregando", false);
   if (!avisarCelular) corpo.dataset.palco = "nao";
-  const item = itemAtual();
-  if (item) {
-    // A fila daqui continua onde estava, pausada.
-    carregar(false);
-  } else {
-    marcar("faixa", false);
-    $("painel-titulo").textContent = "Nada tocando";
-    $("painel-artista").textContent = "Escolha uma música";
-    mostrarLetra(null);
-  }
+  if (itemAtual()) carregar(false); // a fila daqui continua onde estava, pausada
+  else mostrarNada();
   avisarMudanca();
 }
 
@@ -265,42 +309,38 @@ function trocarCapa(id, fonte, f, classe) {
 
 function mostrarFaixa({ fonte, f }) {
   marcar("faixa", true);
-  $("painel-titulo").textContent = f.titulo || "Sem título";
+  const titulo = f.titulo || "Sem título";
+  $("painel-titulo").textContent = titulo;
   $("painel-artista").textContent = f.artista || "";
-  $("palco-titulo").textContent = f.titulo || "Sem título";
+  $("palco-titulo").textContent = titulo;
   $("palco-artista").textContent = [f.artista, f.album].filter(Boolean).join(" · ");
+  $("dir-titulo").textContent = titulo;
+  $("dir-artista").textContent = f.artista || "";
+  $("dir-origem").textContent = player.receptor ? `Do ${player.receptor.celular}` : player.origem?.nome || "Tocando agora";
   $("total").textContent = tempo(f.duracaoMs);
-  document.title = `${f.titulo} — SongV`;
-  trocarCapa("painel-capa", fonte, f, "");
-  const grande = trocarCapa("palco-capa", fonte, f, "capa-grande");
-  document.documentElement.style.setProperty("--tinta", "#1b1512");
-  grande.querySelector("img")?.addEventListener("load", (e) => { tingir(e.target); sessaoDeMidia(f, e.target.src); });
+  document.title = `${titulo} · ${f.artista || "SongV"}`;
+  const pequena = trocarCapa("painel-capa", fonte, f, "");
+  trocarCapa("palco-capa", fonte, f, "palco-capa");
+  trocarCapa("dir-capa", fonte, f, "dir-capa");
+  // A barra de baixo está sempre à vista: a capa dela carrega primeiro e dá a cor do palco.
+  $("palco").style.removeProperty("--cor-palco");
+  pequena.querySelector("img")?.addEventListener("load", (e) => {
+    const cor = corDaCapa(e.target, 0.1, 0.2);
+    if (cor) $("palco").style.setProperty("--cor-palco", cor);
+    sessaoDeMidia(f, e.target.src);
+  });
   sessaoDeMidia(f, null);
 }
 
-/** Tinta do palco: a cor mais viva da capa, escurecida até o texto branco ter folga. */
-function tingir(img) {
-  try {
-    const c = document.createElement("canvas");
-    c.width = c.height = 24;
-    const g = c.getContext("2d", { willReadFrequently: true });
-    g.drawImage(img, 0, 0, 24, 24);
-    const px = g.getImageData(0, 0, 24, 24).data;
-    let melhor = null;
-    let peso = -1;
-    for (let i = 0; i < px.length; i += 4) {
-      const cor = [px[i], px[i + 1], px[i + 2]];
-      const max = Math.max(...cor);
-      const sat = max === 0 ? 0 : (max - Math.min(...cor)) / max;
-      const p = sat * 2 + max / 255;
-      if (p > peso) { peso = p; melhor = cor; }
-    }
-    if (!melhor) return;
-    const t = melhor.map((v, i) => Math.round(v * 0.32 + [17, 14, 13][i] * 0.68));
-    document.documentElement.style.setProperty("--tinta", `rgb(${t.join(" ")})`);
-  } catch {
-    // Capa sem CORS: fica a tinta padrão.
-  }
+function mostrarNada() {
+  marcar("faixa", false);
+  $("painel-titulo").textContent = "Nada tocando";
+  $("painel-artista").textContent = "";
+  $("dir-titulo").textContent = "Nada tocando";
+  $("dir-artista").textContent = "Escolha uma música na biblioteca";
+  $("dir-origem").textContent = "Tocando agora";
+  document.title = "SongV";
+  mostrarLetra(null);
 }
 
 function sessaoDeMidia(f, arte) {
@@ -317,7 +357,7 @@ function lembrar({ fonte, f }) {
   try {
     const h = JSON.parse(localStorage.getItem("recentes") || "[]").filter((r) => !(r.id === f.id && r.fonte === fonte));
     h.unshift({ fonte, id: f.id });
-    localStorage.setItem("recentes", JSON.stringify(h.slice(0, 24)));
+    localStorage.setItem("recentes", JSON.stringify(h.slice(0, 40)));
   } catch {}
 }
 
@@ -338,14 +378,15 @@ export function iniciarPlayer() {
     if (v >= 0 && v <= 1) audio.volume = v;
   } catch {}
   mostrarModos();
+  mostrarVolume();
   const vol = $("volume");
-  vol.value = Math.round(audio.volume * 100);
-  vol.style.setProperty("--p", `${vol.value}%`);
   vol.addEventListener("input", () => {
+    audio.muted = false;
     audio.volume = vol.value / 100;
-    vol.style.setProperty("--p", `${vol.value}%`);
+    mostrarVolume();
     try { localStorage.setItem("volume", String(audio.volume)); } catch {}
   });
+  $("mudo").addEventListener("click", alternarMudo);
 
   barra.addEventListener("input", () => {
     arrastando = true;

@@ -17,5 +17,7 @@ export function iniciar({ definirBiblioteca, conexao }) {
       duracaoMs: 150000 + ((n * 37000) % 120000), tamanho: 1, formato: "mp3", adicionada: 1000 + n,
     })));
   definirBiblioteca("pc", faixas);
-  if (new URLSearchParams(location.search).get("demo") === "celular") conexao({ conectado: true, celular: "Pixel 8" });
+  if (new URLSearchParams(location.search).get("demo") === "celular") {
+    conexao({ conectado: true, celular: "Pixel 8" }).then(() => definirBiblioteca("celular", faixas.slice(4, 13).map((f) => ({ ...f, id: `c${f.id}` }))));
+  }
 }

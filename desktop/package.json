@@ -1,8 +1,8 @@
 {
   "name": "songv-desktop",
   "private": true,
-  "version": "1.0.0",
-  "description": "SongV para computador: receptor na rede local que toca a música que sai do celular.",
+  "version": "1.1.0",
+  "description": "SongV para computador: player com a biblioteca do computador e do celular, e receptor do som do celular na rede local.",
   "scripts": {
     "dev": "tauri dev",
     "build": "tauri build"

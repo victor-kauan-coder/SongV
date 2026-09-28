@@ -110,15 +110,21 @@ Uma família, três larguras: **Archivo** (SIL OFL 1.1), com instâncias estáti
 
 ## 6. SongV para computador
 
-Mesmo mundo, outra superfície (`desktop/ui/`). O modo é **operar** (biblioteca, fila) com um momento
-de **experiência**: o palco da letra.
+Mesmo mundo, outra superfície (`desktop/ui/`), na gramática de player de desktop que o usuário já
+conhece: painéis-cartão escuros sobre um fundo quase preto, a cor da capa vazando nos cabeçalhos,
+um único sinal (o play). O modo é **operar** (biblioteca, fila) com um momento de **experiência**:
+o palco da letra.
 
-- **Estrutura:** barra lateral (logo, Início, Buscar, Álbuns, Artistas, Faixas, Bibliotecas, Configurações), conteúdo no centro e um **painel frontal** fixo embaixo — capa e título à esquerda, transporte e tempo no centro, letra e volume à direita. O conteúdo rola por baixo do painel, então Vidro e Fosco mostram desfoque de verdade (`backdrop-filter`).
-- **Bibliotecas:** "Este computador" e o celular conectado (com LED de conexão). Todas as telas mostram a biblioteca escolhida.
-- **Palco:** capa grande + letra-legenda (Archivo Condensada, linha ativa acesa, as outras a 30%), tingido pela cor da capa. Abre ao clicar na capa do painel ou em Letra, e sozinho quando o celular manda o som.
-- **Tokens:** `--fundo`, `--sinal`, `--sinal-texto` (contraste ≥ 4,5:1 calculado como no app) e `--no-sinal` vêm das configurações; as superfícies derivam do fundo com `color-mix`. Os acabamentos só definem variáveis (`--sup-cor`, `--sup-imagem`, `--sup-filtro`, `--sup-sombra`, `--ambiente`) — as miniaturas de estilo nas configurações usam exatamente as mesmas regras.
-- **Play:** círculo no sinal, triângulo centrado pelo baricentro (centro óptico). Com nada tocando, o play toca a biblioteca em vez de ficar apagado.
-- **Janela estreita (< 1000 px):** a barra lateral vira trilho de ícones e o painel esconde tempo e volume.
+- **Estrutura:** topo (logo, voltar/avançar, Início, busca em pílula "O que você quer ouvir?", Navegar, pílula do celular com LED, Configurações); três painéis — **Sua biblioteca** à esquerda, conteúdo no centro, **Tocando agora + A seguir** à direita (fecha pelo botão de fila); barra do player embaixo (capa e título · transporte e tempo · letra, fila, dispositivos, volume, tela cheia).
+- **Sua biblioteca:** chips de origem (Computador / celular conectado) e de tipo (Álbuns / Artistas), busca e ordem (Recentes = tocados por último, depois adicionados; ou A–Z). "Todas as faixas" fica fixa no topo; artistas têm capa redonda; o que está tocando ganha o alto-falante no sinal.
+- **Páginas:** Início (saudação pela hora, 8 atalhos, fileiras "Tocados/Adicionados recentemente" e "Seus artistas" com "Mostrar tudo"), Navegar por tudo (blocos coloridos com capa inclinada), Busca ao vivo (Melhor resultado + Músicas + Artistas + Álbuns), Álbum, Artista (Músicas + Discografia) e Todas as faixas. Álbum/artista/todas: cabeçalho em degradê com a cor dominante da capa (`corDaCapa`, luminância ≤ 0,09 para o branco por cima), título em Archivo Expandida, play grande no sinal e barra fixa com play + título quando ele sai de vista.
+- **Tabela de faixas:** duplo clique ou Enter toca a partir dali; no passar do mouse o número vira play; a faixa atual fica no sinal com as barrinhas (ou o número no sinal, se pausada). Artista e álbum na linha são links.
+- **Cartões:** capa + título + legenda; play flutuante aparece no passar do mouse e vira pausa quando aquela coleção está tocando.
+- **Palco:** a letra-legenda sobre a cor da capa (luminância 0,1–0,2): linha ativa branca, as que vêm em preto translúcido, as que passaram em branco esmaecido. Cobre o painel central; em tela cheia cobre a janela, deixando a barra do player. Abre sozinho quando o celular manda o som.
+- **Dispositivos:** popover que sai da pílula do celular ou do botão de dispositivos: este computador, o celular conectado (e "Ver as músicas dele"), o pareamento com prazo e o endereço para digitar no celular.
+- **Tokens:** `--fundo`, `--sinal`, `--sinal-texto` (contraste ≥ 4,5:1 calculado como no app) e `--no-sinal` vêm das configurações; a janela é o fundo escurecido, os painéis são o fundo. Os acabamentos só definem variáveis (`--sup-cor`, `--sup-imagem`, `--sup-filtro`, `--sup-sombra`, `--ambiente`) aplicadas aos painéis — as miniaturas de estilo nas configurações usam as mesmas regras.
+- **Play:** o grande é círculo no sinal; o da barra é círculo claro com ícone escuro; triângulos centrados pelo baricentro. Com nada tocando, o play toca a biblioteca.
+- **Janelas menores:** abaixo de 1100 px a biblioteca vira trilho de capas e o painel da direita sai; abaixo de 860 px a barra esconde volume, fila e tela cheia.
 
 ## 7. Estrutura de navegação
 

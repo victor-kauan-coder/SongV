@@ -139,3 +139,45 @@ export function capa(fonte, faixa, rotulo, classe = "") {
   }
   return c;
 }
+
+// ---- cor da capa: cabeçalhos e palco se tingem com ela ----
+
+const lum = (c) => {
+  const [r, g, b] = c.map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; });
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+
+/**
+ * A cor que mais "manda" na capa (a mais frequente, com peso para as vivas), levada para a faixa
+ * de luminância [min, max] para o texto branco por cima continuar legível. `null` se a imagem não
+ * puder ser lida.
+ */
+export function corDaCapa(img, min = 0.02, max = 0.09) {
+  try {
+    const c = document.createElement("canvas");
+    c.width = c.height = 24;
+    const g = c.getContext("2d", { willReadFrequently: true });
+    g.drawImage(img, 0, 0, 24, 24);
+    const px = g.getImageData(0, 0, 24, 24).data;
+    const baldes = new Map();
+    for (let i = 0; i < px.length; i += 4) {
+      const cor = [px[i], px[i + 1], px[i + 2]];
+      const k = (cor[0] >> 5) * 64 + (cor[1] >> 5) * 8 + (cor[2] >> 5);
+      const alto = Math.max(...cor);
+      const sat = alto === 0 ? 0 : (alto - Math.min(...cor)) / alto;
+      const b = baldes.get(k) || { peso: 0, soma: [0, 0, 0], n: 0 };
+      b.peso += 0.25 + sat;
+      b.n++;
+      cor.forEach((v, j) => { b.soma[j] += v; });
+      baldes.set(k, b);
+    }
+    let melhor = null;
+    for (const b of baldes.values()) if (!melhor || b.peso > melhor.peso) melhor = b;
+    let cor = melhor.soma.map((v) => v / melhor.n);
+    for (let i = 0; i < 40 && lum(cor) > max; i++) cor = cor.map((v) => v * 0.9);
+    for (let i = 0; i < 40 && lum(cor) < min; i++) cor = cor.map((v) => v + (255 - v) * 0.06);
+    return `rgb(${cor.map(Math.round).join(" ")})`;
+  } catch {
+    return null; // capa sem CORS
+  }
+}

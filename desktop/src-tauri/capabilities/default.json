@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Janela principal: eventos e comandos do próprio app, nada de sistema de arquivos ou shell.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "core:window:allow-set-fullscreen"]
 }
