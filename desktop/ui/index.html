@@ -12,11 +12,11 @@
   <div class="janela">
 
     <!-- ============================================================ topo -->
-    <header class="topo">
-      <div class="topo-esq">
-        <span class="marca" aria-label="SongV">
-          <svg class="logo" viewBox="27.8 29.6 50 50" aria-hidden="true"><path d="M39.62,73.98 A8.30,5.70 -24 1 0 54.78,67.22 A8.30,5.70 -24 1 0 39.62,73.98 Z M52.22,67.19 L55.34,68.26 L67.83,32.00 L64.34,32.00 Z M28.80,32.00 L37.20,32.00 L43.90,68.00 L47.30,66.80 Z M64.34,32.00 L67.83,32.00 C69.03,36.20 77.03,39.40 76.83,47.20 C76.73,50.60 75.43,53.40 73.83,55.20 C74.83,48.60 73.03,44.40 64.21,42.50 Z"/></svg>
-        </span>
+    <header class="topo" data-tauri-drag-region>
+      <div class="topo-esq" data-tauri-drag-region>
+        <button type="button" class="tecla-icone menu-botao" id="menu-botao" popovertarget="menu" aria-label="Menu" title="Menu">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 10.5a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm7 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3zm7 0a1.5 1.5 0 1 1 0 3 1.5 1.5 0 0 1 0-3z"/></svg>
+        </button>
         <button type="button" class="redondo pequeno" id="voltar" aria-label="Voltar" title="Voltar">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15.4 5.4 14 4l-8 8 8 8 1.4-1.4L8.8 12z"/></svg>
         </button>
@@ -25,7 +25,7 @@
         </button>
       </div>
 
-      <div class="topo-centro">
+      <div class="topo-centro" data-tauri-drag-region>
         <button type="button" class="redondo grande" data-ir="inicio" aria-label="Início" title="Início">
           <svg class="contorno" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2 3 10.4V21h7v-6h4v6h7V10.4zM19 19h-3v-6H8v6H5v-7.6l7-5.6 7 5.6z"/></svg>
           <svg class="cheio" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 3 10.2V21h7v-6h4v6h7V10.2z"/></svg>
@@ -40,15 +40,20 @@
         </label>
       </div>
 
-      <div class="topo-dir">
+      <div class="topo-dir" data-tauri-drag-region>
         <button type="button" class="pilula-celular" id="botao-celular" aria-label="Celular">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 2h8a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 3v13h8V5zm3 14.5v1h2v-1z"/></svg>
           <span id="nome-celular-topo">Conectar celular</span>
           <span class="led" aria-hidden="true"></span>
         </button>
-        <button type="button" class="redondo pequeno" data-ir="config" aria-label="Configurações" title="Configurações">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m19.4 13 .1-1-.1-1 2.1-1.6-2-3.4-2.5 1a7 7 0 0 0-1.7-1l-.4-2.7h-4l-.4 2.7a7 7 0 0 0-1.7 1l-2.5-1-2 3.4L4.5 11l-.1 1 .1 1-2.1 1.6 2 3.4 2.5-1a7 7 0 0 0 1.7 1l.4 2.7h4l.4-2.7a7 7 0 0 0 1.7-1l2.5 1 2-3.4zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>
-        </button>
+        <div class="controles-janela">
+          <button type="button" id="j-min" aria-label="Minimizar" title="Minimizar"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5.5h10"/></svg></button>
+          <button type="button" id="j-max" aria-label="Maximizar" title="Maximizar">
+            <svg class="i-max" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="0.5" width="9" height="9"/></svg>
+            <svg class="i-rest" viewBox="0 0 10 10" aria-hidden="true"><rect x="0.5" y="2.5" width="7" height="7"/><path d="M2.5 2.5v-2h7v7h-2"/></svg>
+          </button>
+          <button type="button" id="j-fechar" aria-label="Fechar" title="Fechar"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0.5 0.5l9 9M9.5 0.5l-9 9"/></svg></button>
+        </div>
       </div>
     </header>
 
@@ -189,6 +194,16 @@
         </button>
       </div>
     </footer>
+  </div>
+
+  <!-- Menu "•••" -->
+  <div class="popover menu superficie" id="menu" popover="auto" aria-label="Menu">
+    <button type="button" class="item-menu" data-menu="config">Configurações</button>
+    <button type="button" class="item-menu" data-menu="pasta">Escolher a pasta de músicas…</button>
+    <button type="button" class="item-menu" data-menu="atualizar">Atualizar a biblioteca</button>
+    <button type="button" class="item-menu" data-menu="celular">Conectar um celular</button>
+    <hr>
+    <button type="button" class="item-menu" data-menu="sobre">Sobre o SongV</button>
   </div>
 
   <!-- Conectar a um dispositivo -->

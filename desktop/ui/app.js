@@ -919,6 +919,44 @@ function alternarDireita(sim = corpo.dataset.direita !== "sim") {
   try { localStorage.setItem("direita", sim ? "sim" : "nao"); } catch {}
 }
 
+// Janela sem a barra do Windows: os controles moram na barra do app.
+if (tauri) {
+  const janela = tauri.window.getCurrentWindow();
+  corpo.dataset.janela = "propria";
+  const botaoMax = $("j-max");
+  const mostrarMax = async () => {
+    const max = await janela.isMaximized();
+    botaoMax.dataset.max = max ? "sim" : "nao";
+    botaoMax.title = max ? "Restaurar" : "Maximizar";
+    botaoMax.setAttribute("aria-label", botaoMax.title);
+  };
+  $("j-min").addEventListener("click", () => janela.minimize());
+  botaoMax.addEventListener("click", () => janela.toggleMaximize());
+  $("j-fechar").addEventListener("click", () => janela.close());
+  janela.onResized(mostrarMax);
+  mostrarMax();
+}
+
+// Menu "•••"
+const menu = $("menu");
+menu.addEventListener("beforetoggle", (e) => {
+  if (e.newState !== "open") return;
+  const r = $("menu-botao").getBoundingClientRect();
+  menu.style.left = `${r.left}px`;
+  menu.style.top = `${r.bottom + 6}px`;
+});
+menu.addEventListener("click", (e) => {
+  const acao = e.target.closest("[data-menu]")?.dataset.menu;
+  if (!acao) return;
+  menu.hidePopover();
+  if (acao === "config" || acao === "sobre") {
+    ir("config");
+    if (acao === "sobre") queueMicrotask(() => conteudo.scrollTo({ top: conteudo.scrollHeight }));
+  } else if (acao === "pasta") escolherPasta();
+  else if (acao === "atualizar") { invoke("atualizar_biblioteca"); avisar("Relendo a pasta de músicas…"); }
+  else if (acao === "celular") abrirDispositivos($("botao-celular"));
+});
+
 $("tocar").addEventListener("click", tocarOuAlternar);
 $("anterior").addEventListener("click", anterior);
 $("proxima").addEventListener("click", proxima);

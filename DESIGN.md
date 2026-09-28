@@ -10,25 +10,29 @@ O código é a fonte da verdade: as cores vivem em [`ui/theme/Cores.kt`](app/src
 
 <img src="docs/imagens/logo.png" width="128" align="right" alt="Ícone do SongV">
 
-**O V é uma colcheia.** O logo é um V caligráfico escrito sobre um pentagrama:
+**O V que é uma nota.** O símbolo é um V em fita laranja: o braço esquerdo, largo, dobra no vértice e sobe como a haste de uma colcheia, que termina na **bandeirola** curva; três **barras de som** à esquerda dão o ritmo. A dobra da fita tem uma sombra vermelho-escura que dá volume. O nome "Song" vem em branco-gelo (ou azul-marinho no claro) e o **V** repete o laranja em degradê.
 
-- o traço **esquerdo** é largo, como o golpe de uma pena, e afina ao chegar embaixo;
-- o traço **direito** é a **haste** de uma nota, com a **bandeirola** de colcheia no topo;
-- o vértice do V é a **cabeça da nota**, apoiada na última linha da pauta;
-- um contorno na cor do fundo interrompe as linhas da pauta ao redor do V, como numa partitura impressa.
+A arte-final é a imagem de identidade ([`docs/imagens/identidade.png`](docs/imagens/identidade.png)) — **nada é redesenhado**. Os arquivos do app são recortes dos próprios pixels dela: o fundo sai por desmistura da borda antialiasada (a cor do miolo da forma define quanto de cada pixel é marca), e cada tamanho é gerado a partir da versão maior, com a borda refeita em alta resolução para não perder nitidez.
 
-| Camada | Arquivo | Conteúdo |
+| Paleta | Hex |
+|---|---|
+| Laranja principal | `#F26B38` |
+| Laranja secundário | `#FF8A3D` |
+| Azul-marinho | `#121826` (fundo do ícone: `#0D1420`, medido na arte) |
+| Off-white | `#F7F4EE` |
+
+| Uso | Arquivo | Conteúdo |
 |---|---|---|
-| Fundo adaptativo | `drawable/ic_launcher_background.xml` | laranja com luz radial + pauta creme a 55% |
-| Frente adaptativa | `drawable/ic_launcher_foreground.xml` | V-colcheia grafite com contorno laranja |
-| Monocromático (Android 13+) | `drawable/ic_launcher_monochrome.xml` | só a silhueta do V-colcheia |
-| Notificação | `drawable/ic_stat_songv.xml` | silhueta branca 24 dp |
-| Splash | `drawable/ic_splash.xml` | marca completa recortada em círculo |
-| Logo dentro do app | `drawable/logo_songv.xml` | só o V-colcheia, branco, tingido na cor de destaque (`LogoSongV`) |
+| Fundo adaptativo | `drawable/ic_launcher_background.xml` | azul-marinho liso |
+| Frente adaptativa | `drawable-*dpi/ic_launcher_foreground.png` | o símbolo com 76% da área visível, como no "Ícone do app" da arte (cabe na zona segura de 66 dp) |
+| Monocromático (Android 13+) | `drawable-*dpi/ic_launcher_monochrome.png` | silhueta do símbolo |
+| Notificação | `drawable-*dpi/ic_stat_songv.png` | silhueta branca 24 dp |
+| Splash | `drawable-*dpi/ic_splash.png` | círculo marinho com o símbolo |
+| Cabeçalho do app | `drawable-*dpi/marca_simbolo`, `marca_song`, `marca_v` | a marca horizontal em camadas alinhadas (`MarcaSongV`) |
+| Símbolo sozinho | `drawable-*dpi/logo_simbolo.png` | tela de permissão (`LogoSongV`) |
+| Computador | `desktop/src-tauri/icons/*`, `desktop/ui/marca.png` | bloco arredondado marinho (canto 19,5%) e o símbolo da barra do topo |
 
-A geometria cabe na zona segura de 66 dp dos ícones adaptativos; a pauta ocupa o fundo inteiro, então ela desliza por baixo do V nas animações de ícone do launcher.
-
-**Marca em texto:** V-colcheia + "Song**V**" em Archivo Expandida Black, os dois V na cor de destaque escolhida (`MarcaSongV` em `InicioScreen.kt`). Dentro do app a logo nunca leva o quadrado laranja do ícone: ela é tinta, não etiqueta.
+**Cor de destaque.** Com o laranja padrão a marca aparece com as cores da arte. Com outro destaque, `filtroDaMarca` leva a luminância de cada pixel para a nova cor — o laranja principal vira exatamente o destaque, e a dobra e o brilho continuam mais escuros e mais claros. "Song" acompanha o tema: branco-gelo no escuro, azul-marinho no claro (as duas versões da própria arte). No computador a barra de cima não leva logo, como nos players de desktop.
 
 ---
 

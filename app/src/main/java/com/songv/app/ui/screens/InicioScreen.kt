@@ -42,11 +42,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import com.songv.app.model.Album
 import com.songv.app.model.Artista
@@ -67,6 +64,15 @@ import com.songv.app.ui.theme.LocalCoresSongV
 import com.songv.app.ui.theme.acabamento
 import com.songv.app.ui.theme.realce
 import com.songv.app.ui.theme.superficie
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
+import com.songv.app.R
+import com.songv.app.ui.theme.Marca
 
 @Composable
 fun InicioScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: PaddingValues) {
@@ -225,34 +231,59 @@ fun InicioScreen(vm: PlayerViewModel, nav: Navegador, contentPadding: PaddingVal
     }
 }
 
-/** O V-colcheia do logo e "SongV" em Archivo Expandida, os dois na cor de destaque escolhida. */
+/**
+ * A marca SongV exatamente como na identidade visual (símbolo + nome), em camadas alinhadas:
+ * "Song" na cor do texto do tema (branco-gelo no escuro, azul-marinho no claro — as duas versões
+ * da arte); o símbolo e o V nas cores originais ou, com outra cor de destaque, recoloridos nela
+ * mantendo sombras e brilhos.
+ */
 @Composable
-fun MarcaSongV(modifier: Modifier = Modifier, logo: Boolean = true) {
-    val sinal = LocalCoresSongV.current.sinal
-    Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        if (logo) {
-            LogoSongV(Modifier.size(30.dp))
-            Spacer(Modifier.width(8.dp))
+fun MarcaSongV(modifier: Modifier = Modifier, logo: Boolean = true, altura: Dp = if (logo) 36.dp else 30.dp) {
+    val marca = filtroDaMarca(LocalCoresSongV.current.sinal)
+    val texto = ColorFilter.tint(MaterialTheme.colorScheme.onBackground)
+    val camadas = if (logo) {
+        listOf(R.drawable.marca_simbolo to marca, R.drawable.marca_song to texto, R.drawable.marca_v to marca)
+    } else {
+        listOf(R.drawable.nome_song to texto, R.drawable.nome_v to marca)
+    }
+    Box(modifier.semantics { contentDescription = "SongV" }) {
+        Box(Modifier.height(altura).aspectRatio(if (logo) 3.4097f else 3.4833f, matchHeightConstraintsFirst = true)) {
+            for ((id, filtro) in camadas) {
+                Image(painterResource(id), contentDescription = null, colorFilter = filtro, modifier = Modifier.fillMaxSize())
+            }
         }
-        Text(
-            buildAnnotatedString {
-                append("Song")
-                withStyle(SpanStyle(color = sinal)) { append("V") }
-            },
-            style = EstilosSongV.marca,
-            color = MaterialTheme.colorScheme.onBackground,
-        )
     }
 }
 
-/** Só o V-colcheia, sem o fundo do ícone, tingido com a cor de destaque. */
+/** Só o símbolo (V-colcheia com as barras de som), nas cores da marca ou no destaque escolhido. */
 @Composable
 fun LogoSongV(modifier: Modifier = Modifier) {
-    Icon(
-        androidx.compose.ui.res.painterResource(com.songv.app.R.drawable.logo_songv),
+    Image(
+        painterResource(R.drawable.logo_simbolo),
         contentDescription = null,
-        tint = LocalCoresSongV.current.sinal,
+        colorFilter = filtroDaMarca(LocalCoresSongV.current.sinal),
         modifier = modifier,
+    )
+}
+
+/**
+ * Com o laranja padrão, nenhuma mudança (as cores da arte). Com outro destaque, leva a luminância
+ * de cada pixel para a nova cor: o laranja principal da marca (#F26B38) vira exatamente o
+ * destaque, e a dobra escura e o brilho continuam mais escuros/claros.
+ */
+fun filtroDaMarca(destaque: Color): ColorFilter? {
+    if (destaque == Marca.Laranja) return null
+    val referencia = (0.299f * 242 + 0.587f * 107 + 0.114f * 56) / 255f
+    val (r, g, b) = listOf(destaque.red, destaque.green, destaque.blue).map { it / referencia }
+    return ColorFilter.colorMatrix(
+        ColorMatrix(
+            floatArrayOf(
+                r * 0.299f, r * 0.587f, r * 0.114f, 0f, 0f,
+                g * 0.299f, g * 0.587f, g * 0.114f, 0f, 0f,
+                b * 0.299f, b * 0.587f, b * 0.114f, 0f, 0f,
+                0f, 0f, 0f, 1f, 0f,
+            ),
+        ),
     )
 }
 

@@ -151,8 +151,24 @@ body[data-direita="nao"] .direita { display: none; }
 .topo-esq { display: flex; align-items: center; gap: 8px; }
 .topo-centro { display: flex; align-items: center; gap: 8px; }
 .topo-dir { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-.marca { display: grid; place-items: center; width: 40px; height: 40px; margin-right: 4px; }
-.logo { width: 30px; height: 30px; fill: var(--sinal); }
+.menu-botao { width: 40px; height: 40px; margin-right: 4px; }
+.menu-botao svg { width: 22px; height: 22px; }
+
+/* Controles da janela (a barra do Windows sai; a do app ocupa o lugar dela, como no Spotify). */
+.controles-janela { display: none; align-self: stretch; margin: 0 -8px 0 8px; }
+body[data-janela="propria"] .controles-janela { display: flex; }
+.controles-janela button { display: grid; place-items: center; width: 46px; height: 100%; border: 0; background: none; color: var(--texto); transition: background 120ms; }
+.controles-janela button:hover { background: rgba(255, 255, 255, 0.1); }
+.controles-janela #j-fechar:hover { background: #c42b1c; color: #fff; }
+.controles-janela svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1; shape-rendering: crispEdges; }
+#j-max .i-rest, #j-max[data-max="sim"] .i-max { display: none; }
+#j-max[data-max="sim"] .i-rest { display: block; }
+body[data-janela="propria"] .topo-dir { align-self: stretch; }
+
+.popover.menu { width: 248px; padding: 4px; }
+.item-menu { display: block; width: 100%; padding: 12px 12px; border: 0; border-radius: 4px; background: none; color: var(--texto); font-size: 14px; font-weight: 500; text-align: left; }
+.item-menu:hover, .item-menu:focus-visible { background: var(--hover); outline: none; }
+.menu hr { margin: 4px 0; border: 0; border-top: 1px solid rgba(255, 255, 255, 0.1); }
 
 .redondo {
   display: grid;
